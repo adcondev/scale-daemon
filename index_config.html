@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ejemplo de atributo Href</title>
+</head>
+<body>
+<h1>Ejemplo de báscula</h1>
+<p>
+    Peso: <input id="peso" name="peso" type="text">
+    Cantidad: <input id="cantidad" name="cantidad" type="text">
+</p>
+<p>
+    Puerto COM: <input id="puerto" type="text" value="COM6"><br>
+    Marca: <input id="marca" type="text" value="rhino"><br>
+    Modo prueba: <input id="modoPrueba" type="checkbox">
+</p>
+
+<script>
+    (function () {
+        const wsUrl = "ws://localhost:8765";
+        let socket = null;
+        let reconnectDelay = 3000;
+        let isConnected = false;
+
+        function obtenerConfiguracion() {
+            return {
+                tipo: "config",
+                puerto: document.getElementById("puerto").value || "COM7",
+                marca: document.getElementById("marca").value || "rhino",
+                modoPrueba: document.getElementById("modoPrueba").checked
+            };
+        }
+
+        function conectarWebSocket() {
+            socket = new WebSocket(wsUrl);
+
+            socket.onopen = () => {
+                console.log("[✅ WebSocket conectado]");
+                isConnected = true;
+
+                // Enviar configuración al servidor
+                const config = obtenerConfiguracion();
+                console.log("[⚙️ Enviando configuración]:", config);
+                socket.send(JSON.stringify(config));
+            };
+
+            socket.onmessage = (event) => {
+                const peso = event.data;
+                console.log("[📦 Peso recibido]:", peso);
+
+                const input = document.querySelector("input[name='peso']");
+                if (input) {
+                    input.value = peso;
+                    input.dispatchEvent(new Event("input", {bubbles: true}));
+                } else {
+                    console.warn("[⚠️ Input de peso no encontrado]");
+                }
+            };
+
+            socket.onclose = () => {
+                console.warn("[⚠️ WebSocket desconectado]");
+                isConnected = false;
+                reintentarConexion();
+            };
+
+            socket.onerror = (err) => {
+                console.error("[❌ Error en WebSocket]:", err);
+                socket.close();
+            };
+        }
+
+        function reintentarConexion() {
+            if (!isConnected) {
+                setTimeout(() => {
+                    console.log("[🔁 Reintentando conexión WebSocket...]");
+                    conectarWebSocket();
+                }, reconnectDelay);
+            }
+        }
+
+        conectarWebSocket();
+    })();
+</script>
+</body>
+</html>

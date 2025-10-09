@@ -1,0 +1,87 @@
+<html>
+<head>
+    <title>Ejemplo de atributo Href</title>
+</head>
+<body>
+<h1>Ejemplo de atributo Href</h1>
+<p>
+    Peso: <input id="peso" name="peso" type="text">
+    Precio: <input id="precio" name="precio" type="text" value="100">
+    Total: <input id="total" name="total" readonly type="text">
+</p>
+</body>
+
+<script>
+    (function () {
+        const wsUrl = "ws://localhost:8765";
+        let socket = null;
+        let reconnectDelay = 3000;
+        let isConnected = false;
+
+        function calcularTotal() {
+            const pesoInput = document.querySelector("input[name='peso']");
+            const precioInput = document.querySelector("input[name='precio']");
+            const totalInput = document.querySelector("input[name='total']");
+
+            const peso = parseFloat(pesoInput.value) || 0;
+            const precio = parseFloat(precioInput.value) || 0;
+
+            const total = peso * precio;
+            totalInput.value = total.toFixed(2);
+        }
+
+        // Cuando cambia el peso manualmente, recalcula
+        document.addEventListener("DOMContentLoaded", () => {
+            const pesoInput = document.querySelector("input[name='peso']");
+            pesoInput.addEventListener("input", calcularTotal);
+        });
+
+        function conectarWebSocket() {
+            socket = new WebSocket(wsUrl);
+
+            socket.onopen = () => {
+                console.log("[✅ WebSocket conectado]");
+                isConnected = true;
+            };
+
+            socket.onmessage = (event) => {
+                let peso = event.data;
+                let numero = parseFloat(peso.replace(/["kg]/g, "").trim());
+
+                console.log("[📦 Peso recibido]:", numero, "cadena original:", peso);
+
+                const inputPeso = document.querySelector("input[name='peso']");
+
+                if (inputPeso) {
+                    inputPeso.value = numero;
+                    inputPeso.dispatchEvent(new Event("input", {bubbles: true})); // Esto activa el cálculo
+                } else {
+                    console.warn("[⚠️ Input de peso no encontrado]");
+                }
+            };
+
+            socket.onclose = () => {
+                console.warn("[⚠️ WebSocket desconectado]");
+                isConnected = false;
+                reintentarConexion();
+            };
+
+            socket.onerror = (err) => {
+                console.error("[❌ Error en WebSocket]:", err);
+                socket.close();
+            };
+        }
+
+        function reintentarConexion() {
+            if (!isConnected) {
+                setTimeout(() => {
+                    console.log("[🔁 Reintentando conexión WebSocket...]");
+                    conectarWebSocket();
+                }, reconnectDelay);
+            }
+        }
+
+        conectarWebSocket();
+    })();
+</script>
+</html>
