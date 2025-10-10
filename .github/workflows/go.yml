@@ -27,7 +27,6 @@ jobs:
         # Used to specify the path to a dependency file - go.sum
         cache-dependency-path: .
         # Target architecture for Go to use. Examples: x86, x64. Will use system architecture by default.
-        architecture: x86
 
     - name: Build
       run: go build -v ./...
