@@ -21,6 +21,10 @@
 !index.html
 !index_config.html
 
+!install.bat
+!uninstall.bat
+!commands.bat
+
 # !Makefile
 
 # ...even if they are in subdirectories
