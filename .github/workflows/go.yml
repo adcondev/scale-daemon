@@ -22,8 +22,6 @@ jobs:
       with:
         # The Go version to download (if necessary) and use. Supports semver spec and ranges. Be sure to enclose this option in single quotation marks.
         go-version: 1.24
-        # Path to the go.mod or go.work file.
-        go-version-file: .
         # Used to specify whether caching is needed. Set to true, if you'd like to enable caching.
         cache: true
         # Used to specify the path to a dependency file - go.sum
