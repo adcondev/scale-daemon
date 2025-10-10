@@ -1,11 +1,11 @@
-# Stop the service
+REM Stop the service
 sc stop BasculaServicio
 
-# Start the service
+REM Start the service
 sc start BasculaServicio
 
-# Restart (stop then start)
+REM Restart (stop then start)
 sc stop BasculaServicio && timeout /t 2 && sc start BasculaServicio
 
-# Check status
+REM Check status
 sc query BasculaServicio
