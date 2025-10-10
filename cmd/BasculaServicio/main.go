@@ -8,17 +8,69 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"go.bug.st/serial"
 	//"go.bug.st/serial/enumerator" // Posiblemente necesites esto si quieres listar puertos
+	"github.com/judwhite/go-svc"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 )
 
 // ... (mantén las mismas estructuras y variables globales) ...
+
+// Program implementa la interfaz svc.Service
+type Program struct {
+	wg   sync.WaitGroup
+	quit chan struct{}
+}
+
+// Start is called after Init. This method must be non-blocking.
+func (p *Program) Start() error {
+	p.quit = make(chan struct{})
+	p.wg.Add(1)
+
+	go func() {
+		defer p.wg.Done()
+		// Run your existing WebSocket server code here
+		log.Println("🌐 Servidor activo en ws://localhost:8765")
+
+		// Initialize your existing components
+		rand.Seed(time.Now().UnixNano())
+		iniciarLectura()
+		iniciarBroadcaster()
+
+		// Start HTTP server in a goroutine
+		go func() {
+			if err := http.ListenAndServe("localhost:8765", nil); err != nil {
+				log.Printf("🛑 Error al iniciar servidor: %v", err)
+				// Signal the service to stop on server failure
+				close(p.quit)
+			}
+		}()
+
+		// Wait for quit signal
+		<-p.quit
+	}()
+
+	return nil
+}
+
+// Stop is called when the service is being stopped
+func (p *Program) Stop() error {
+	log.Println("Service stopping...")
+	// Signal the service to stop
+	close(p.quit)
+	// Wait for all goroutines to exit
+	p.wg.Wait()
+	log.Println("Service stopped")
+	return nil
+}
 
 type Configuracion struct {
 	Tipo       string `json:"tipo"`
@@ -28,7 +80,7 @@ type Configuracion struct {
 }
 
 var (
-	configActual      = Configuracion{Puerto: "COM7", Marca: "rhino", ModoPrueba: false}
+	configActual      = Configuracion{Puerto: "COM7", Marca: "rhino", ModoPrueba: true}
 	mutexConfig       sync.Mutex
 	serialPort        serial.Port
 	mutexSerial       sync.Mutex
@@ -331,31 +383,30 @@ func manejarCliente(w http.ResponseWriter, r *http.Request) {
 	log.Println("🔌 Cliente desconectado")
 }
 
-// main permanece igual
+// Init es llamada cuando el servicio se inicia
+func (p *Program) Init(env svc.Environment) error {
+	// archivo de logs
+	logFile := filepath.Join(os.Getenv("PROGRAMDATA"), "BasculaServicio", "service.log")
+	err := os.MkdirAll(filepath.Dir(logFile), 0755)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		return err
+	}
+	log.SetOutput(f)
+	log.Printf("Iniciando Servicio...")
+	return nil
+}
+
 func main() {
-	rand.Seed(time.Now().UnixNano()) // Inicializa el generador de números aleatorios
+	// Register HTTP handler
+	http.HandleFunc("/", manejarCliente)
 
-	// Opcional: Listar puertos disponibles al inicio
-	/*
-	   ports, err := enumerator.GetPorts()
-	   if err != nil {
-	       log.Printf("⚠️ No se pudieron listar los puertos seriales: %v", err)
-	   } else {
-	       log.Println("Puertos seriales disponibles:")
-	       for _, port := range ports {
-	           log.Printf("- %s (%s)", port.Name, port.Product)
-	       }
-	   }
-	*/
-
-	iniciarLectura()     // Inicia la goroutine que lee del puerto serial o simula
-	iniciarBroadcaster() // Inicia la goroutine que envía datos a los clientes WebSocket
-
-	http.HandleFunc("/", manejarCliente) // Registra el manejador para las conexiones WebSocket
-
-	log.Println("🌐 Servidor activo en ws://localhost:8765")
-	// Inicia el servidor HTTP para escuchar conexiones WebSocket
-	if err := http.ListenAndServe("localhost:8765", nil); err != nil {
-		log.Fatal("🛑 Error al iniciar servidor:", err) // Sale del programa si el servidor falla
+	// Create and run the service
+	prg := &Program{}
+	if err := svc.Run(prg, syscall.SIGINT, syscall.SIGTERM); err != nil {
+		log.Fatal(err)
 	}
 }
