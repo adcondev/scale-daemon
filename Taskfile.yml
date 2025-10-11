@@ -1,0 +1,73 @@
+# https://taskfile.dev
+version: '3'
+
+vars:
+  SERVICE_NAME: BasculaServicio
+  INSTALLER_NAME: BasculaInstalador
+  SERVICE_PATH: ./cmd/{{.SERVICE_NAME}}/main.go
+  INSTALLER_PATH: ./cmd/{{.INSTALLER_NAME}}/main.go
+
+tasks:
+  default:
+    desc: Mostrar tareas disponibles
+    cmds:
+      - task --list
+
+  deps:
+    desc: Descargar dependencias
+    cmds:
+      - go mod download
+      - go mod tidy
+
+  service:build:
+    desc: Compilar servicio Windows
+    cmds:
+      - mkdir -p ./bin
+      - go build -ldflags="-w -s -H=windowsgui" -o ./bin/{{.SERVICE_NAME}}.exe {{.SERVICE_PATH}}
+    sources:
+      - '{{.SERVICE_PATH}}'
+      - './internal/**/*.go'
+    generates:
+      - './bin/{{.SERVICE_NAME}}.exe'
+
+  installer:build:
+    desc: Compilar instalador con servicio embebido
+    deps: [ service:build ]
+    cmds:
+      - go build -ldflags="-w -s" -o ./bin/{{.INSTALLER_NAME}}.exe {{.INSTALLER_PATH}}
+    sources:
+      - '{{.INSTALLER_PATH}}'
+      - './bin/{{.SERVICE_NAME}}.exe'
+    generates:
+      - './bin/{{.INSTALLER_NAME}}.exe'
+
+  build:all:
+    desc: Compilar todo (servicio + instalador)
+    cmds:
+      - task: service:build
+      - task: installer:build
+
+  installer:run:
+    desc: Ejecutar instalador (requiere admin)
+    deps: [ installer:build ]
+    cmds:
+      - ./bin/{{.INSTALLER_NAME}}.exe
+
+  clean:
+    desc: Limpiar archivos compilados
+    cmds:
+      - rm -rf ./bin
+      - mkdir ./bin
+
+  test:
+    desc: Ejecutar pruebas
+    cmds:
+      - go test -v ./...
+
+  release:
+    desc: Crear release con compresión UPX
+    deps: [ build:all ]
+    cmds:
+      - cmd: upx --best --lzma ./bin/{{.INSTALLER_NAME}}.exe
+        ignore_error: true
+      - echo "Release creado en ./bin/{{.INSTALLER_NAME}}.exe"
