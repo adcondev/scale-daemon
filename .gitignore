@@ -20,6 +20,8 @@
 
 !web/html/*.html
 
+!init/*.bat
+
 !scripts/*.bat
 
 !build/*.bat

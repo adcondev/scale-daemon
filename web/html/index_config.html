@@ -10,9 +10,11 @@
     Cantidad: <input id="cantidad" name="cantidad" type="text">
 </p>
 <p>
-    Puerto COM: <input id="puerto" type="text" value="COM6"><br>
-    Marca: <input id="marca" type="text" value="rhino"><br>
-    Modo prueba: <input checked="checked" id="modoPrueba" type="checkbox">
+    Puerto COM: <input id="puerto" type="text" value="COM3"><br>
+    Marca: <input id="marca" type="text" value="Rhino BAR 8RS"><br>
+    Modo prueba: <input id="modoPrueba" type="checkbox">
+    Dirección: <input id="direccionWs" type="text" value="ws://localhost:8765">
+    <button class="btn-config" id="aplicarConfig">Aplicar Configuración</button>
 </p>
 
 <script>
@@ -25,9 +27,10 @@
         function obtenerConfiguracion() {
             return {
                 tipo: "config",
-                puerto: document.getElementById("puerto").value || "COM7",
-                marca: document.getElementById("marca").value || "rhino",
-                modoPrueba: document.getElementById("modoPrueba").checked
+                puerto: document.getElementById("puerto").value || "COM3",
+                marca: document.getElementById("marca").value || "Rhino BAR 8RS",
+                modoPrueba: document.getElementById("modoPrueba").checked,
+                dir: document.getElementById("direccionWs").value || "ws://localhost:8765"
             };
         }
 
