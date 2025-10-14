@@ -18,12 +18,15 @@
 !README.md
 !LICENSE
 
-!index.html
-!index_config.html
+!web/html/*.html
 
-!install.bat
-!uninstall.bat
-!commands.bat
+!init/*.bat
+
+!scripts/*.bat
+
+!build/*.bat
+
+!Taskfile.yml
 
 # !Makefile
 

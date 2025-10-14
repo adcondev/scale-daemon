@@ -1,0 +1,81 @@
+# https://taskfile.dev
+version: '3'
+
+vars:
+  SERVICE_NAME: BasculaServicio
+  INSTALLER_NAME: BasculaInstalador
+  SERVICE_PATH: ./cmd/{{.SERVICE_NAME}}/service.go
+  INSTALLER_PATH: ./cmd/{{.INSTALLER_NAME}}/installer.go
+  # Build tags for environment
+  BUILD_ENV: '{{.BUILD_ENV | default "prod"}}'
+  BUILD_DATE: '{{now | date "2006-01-02"}}'
+  BUILD_TIME: '{{now | date "15:04:05"}}'
+
+tasks:
+  default:
+    desc: Mostrar tareas disponibles
+    cmds:
+      - task --list
+
+  deps:
+    desc: Descargar dependencias
+    cmds:
+      - go mod download
+      - go mod tidy
+
+  service:build:
+    desc: Compilar servicio Windows ({{.BUILD_ENV}})
+    cmds:
+      - mkdir -p ./bin
+      - |
+        go build -ldflags="-w -s -H=windowsgui \
+        -X main.BuildEnvironment={{.BUILD_ENV}} \
+        -X main.BuildDate={{.BUILD_DATE}} \
+        -X main.BuildTime={{.BUILD_TIME}}" \
+        -o ./bin/{{.SERVICE_NAME}}_{{.BUILD_ENV}}.exe {{.SERVICE_PATH}}
+    sources:
+      - '{{.SERVICE_PATH}}'
+      - './internal/**/*.go'
+    generates:
+      - './bin/{{.SERVICE_NAME}}_{{.BUILD_ENV}}.exe'
+
+  installer:build:
+    desc: Compilar instalador con servicio embebido ({{.BUILD_ENV}})
+    deps: [ service:build ]
+    cmds:
+      - |
+        go build -ldflags="-w -s \
+        -X main.BuildEnvironment={{.BUILD_ENV}} \
+        -X main.BuildDate={{.BUILD_DATE}} \
+        -X main.BuildTime={{.BUILD_TIME}}" \
+        -tags {{.BUILD_ENV}} \
+        -o ./bin/{{.INSTALLER_NAME}}_{{.BUILD_ENV}}.exe {{.INSTALLER_PATH}}
+    sources:
+      - '{{.INSTALLER_PATH}}'
+      - './bin/{{.SERVICE_NAME}}_{{.BUILD_ENV}}.exe'
+    generates:
+      - './bin/{{.INSTALLER_NAME}}_{{.BUILD_ENV}}.exe'
+
+  # Build for PRODUCTION (0.0.0.0)
+  build:all:
+    desc: Compilar todo para PRODUCCION (escucha en 0.0.0.0)
+    cmds:
+      - task: service:build
+        vars:
+          BUILD_ENV: prod
+      - task: installer:build
+        vars:
+          BUILD_ENV: prod
+      - echo "[OK] Build PRODUCCION completado - ./bin/{{.INSTALLER_NAME}}_prod.exe"
+
+  # Build for TEST (localhost only)
+  build:test:
+    desc: Compilar todo para TEST/DEV (escucha solo en localhost)
+    cmds:
+      - task: service:build
+        vars:
+          BUILD_ENV: test
+      - task: installer:build
+        vars:
+          BUILD_ENV: test
+      - echo "[OK] Build TEST completado - ./bin/{{.INSTALLER_NAME}}_test.exe"
