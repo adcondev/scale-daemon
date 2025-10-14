@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bascula - Configuracion</title>
+    <style>
+        .env-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .env-prod {
+            background: #FF0040;
+            color: white;
+        }
+
+        .env-test {
+            background: #00FF40;
+            color: black;
+        }
+    </style>
+</head>
+<body>
+<h1>Bascula <span class="env-badge" id="envBadge">Conectando...</span></h1>
+<p>
+    Peso: <label for="peso"></label><input id="peso" name="peso" type="text">
+    Cantidad: <label for="cantidad"></label><input id="cantidad" name="cantidad" type="text">
+</p>
+<p>
+    Puerto COM: <label for="puerto"></label><input id="puerto" type="text" value="COM3"><br>
+    Marca: <label for="marca"></label><input id="marca" type="text" value="Rhino BAR 8RS"><br>
+    Modo prueba: <label for="modoPrueba"></label><input id="modoPrueba" type="checkbox">
+    <span id="modoStatus"></span><br>
+    Dirección: <label for="direccionWs"></label><input id="direccionWs" type="text" value="ws://localhost:8765">
+    <button id="aplicarConfig">Aplicar Configuración</button>
+</p>
+
+<script>
+    (function () {
+        let defaultWsUrl = `ws://${window.location.hostname}:8765`;
+        let wsUrl = document.getElementById("direccionWs").value || defaultWsUrl;
+        let socket = null;
+        let isConnected = false;
+        let currentEnv = "unknown";
+
+        function updateEnvironmentBadge(ambiente) {
+            const badge = document.getElementById("envBadge");
+            if (ambiente) {
+                currentEnv = ambiente;
+                badge.textContent = ambiente;
+                badge.className = "env-badge " +
+                    (ambiente.includes("TEST") ? "env-test" : "env-prod");
+
+                // Update default mode based on environment
+                if (ambiente.includes("TEST")) {
+                    document.getElementById("modoPrueba").checked = true;
+                    document.getElementById("modoStatus").textContent = "(Recomendado para TEST)";
+                } else {
+                    document.getElementById("modoStatus").textContent = "(Modo PRODUCCION)";
+                }
+            }
+        }
+
+        function obtenerConfiguracion() {
+            return {
+                tipo: "config",
+                puerto: document.getElementById("puerto").value || "COM3",
+                marca: document.getElementById("marca").value || "Rhino BAR 8RS",
+                modoPrueba: document.getElementById("modoPrueba").checked,
+                dir: document.getElementById("direccionWs").value
+            };
+        }
+
+        function conectarWebSocket() {
+            socket = new WebSocket(wsUrl);
+
+            socket.onopen = () => {
+                console.log("[OK] WebSocket conectado");
+                isConnected = true;
+            };
+
+            socket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.tipo === "ambiente") {
+                        console.log("[i] Info de ambiente:", data);
+                        updateEnvironmentBadge(data.ambiente);
+                        // Update initial config from server
+                        if (data.config) {
+                            document.getElementById("puerto").value = data.config.puerto;
+                            document.getElementById("marca").value = data.config.marca;
+                            document.getElementById("modoPrueba").checked = data.config.modoPrueba;
+                            document.getElementById("direccionWs").value = data.config.dir;
+                        }
+                        return;
+                    }
+                } catch (e) {
+                    // Not JSON, treat as weight data
+                }
+
+                const peso = event.data;
+                console.log("[>] Peso recibido:", peso);
+
+                const input = document.querySelector("input[name='peso']");
+                if (input) {
+                    input.value = peso;
+                    input.dispatchEvent(new Event("input", {bubbles: true}));
+                }
+            };
+
+            socket.onclose = () => {
+                console.warn("[!] WebSocket desconectado");
+                isConnected = false;
+                document.getElementById("envBadge").textContent = "Desconectado";
+                document.getElementById("envBadge").className = "env-badge";
+                setTimeout(() => {
+                    console.log("[*] Reintentando conexion...");
+                    conectarWebSocket();
+                }, 3000);
+            };
+
+            socket.onerror = (err) => {
+                console.error("[X] Error en WebSocket:", err);
+            };
+        }
+
+        document.getElementById("aplicarConfig").addEventListener("click", () => {
+            if (socket && isConnected) {
+                const config = obtenerConfiguracion();
+                console.log("[i] Enviando configuracion:", config);
+                socket.send(JSON.stringify(config));
+            }
+        });
+
+        conectarWebSocket();
+    })();
+</script>
+</body>
+</html>

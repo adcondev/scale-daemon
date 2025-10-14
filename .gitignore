@@ -20,11 +20,15 @@
 
 !web/html/*.html
 
+!init/*.bat
+
 !scripts/*.bat
 
 !build/*.bat
 
 !Taskfile.yml
+
+!.github/workflows/*.yml
 
 # !Makefile
 
