@@ -16,4 +16,4 @@ REM Delete service
 sc delete BasculaServicio
 
 REM Install service
-sc create BasculaServicio binPath= "C:\Path\To\Your\ServiceExecutable.exe
+sc create BasculaServicio binPath= "C:\Path\To\Your\ServiceExecutable.exe"
