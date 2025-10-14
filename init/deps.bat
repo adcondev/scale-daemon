@@ -1,13 +1,37 @@
-REM Instalar Golang 1.24.6
-winget install --id=GoLang.Go -v "1.24.6" -e
-REM Dependencias de desarrollo
-winget install Task.Task
-REM Una vez instalado Task: task --list o ver el Taskfile.yml, dependencias de Golang:
-task deps
-REM Variables de Entorno
-setx USERPROFILE "C:\Users\RED 2000" /M
-setx GOPATH "%USERPROFILE%\go" /M
-setx GOROOT "C:\Program Files\Go" /M
-setx PATH "%PATH%;%GOPATH%\bin;C:\Program Files\Go\bin" /M
-REM Path a la carpeta bin del proyecto
-setx CD "%USERPROFILE%\GolandProjects\daemonize-example\bin" /M
+@echo off
+REM ============================================
+REM  Instalador de Dependencias - Sistema Báscula
+REM ============================================
+
+echo [+] Instalando Go 1.24.6...
+winget install --id=GoLang.Go -v "1.24.6" -e --silent
+
+echo [+] Instalando Task...
+winget install Task.Task --silent
+
+echo [+] Configurando variables de entorno...
+REM Detectar directorio de usuario actual
+for /f "tokens=*" %%i in ('echo %USERPROFILE%') do set USER_DIR=%%i
+
+REM Configurar GOPATH y GOROOT
+setx GOPATH "%USER_DIR%\go" >nul 2>&1
+setx GOROOT "%ProgramFiles%\Go" >nul 2>&1
+
+REM Actualizar PATH
+set "NEW_PATH=%PATH%;%USER_DIR%\go\bin;%ProgramFiles%\Go\bin"
+setx PATH "%NEW_PATH%" >nul 2>&1
+
+echo [+] Instalando dependencias de Go...
+cd /d "%~dp0"
+go mod download
+go mod tidy
+
+echo.
+echo [OK] Instalación completada!
+echo.
+echo Próximos pasos:
+echo   1. Reiniciar terminal/IDE
+echo   2. Ejecutar: task --list
+echo   3. Compilar: task build:all
+echo.
+pause
