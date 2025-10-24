@@ -31,7 +31,7 @@ graph TD
 
 ## Installation
 
-1.  Download the latest installer executable (`BasculaInstalador_prod.exe` or `BasculaInstalador_test.exe`) from the [Releases](PLACEHOLDER_URL) page.
+1.  Download the latest installer executable (`BasculaInstalador_prod.exe` or `BasculaInstalador_test.exe`) from the [Releases](https://github.com/adcondev/daemonize-example/releases) page.
 2.  Right-click the installer and select **"Run as administrator"**.
 3.  Follow the on-screen instructions in the terminal interface to install and start the service.
 
