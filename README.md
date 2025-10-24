@@ -12,8 +12,8 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.24.6-00ADD8?style=for-the-badge&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen?style=for-the-badge)](PLACEHOLDER_URL)
-[![Release](https://img.shields.io/badge/Release-v0.4.0-blue?style=for-the-badge)](PLACEHOLDER_URL)
+[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen?style=for-the-badge)](https://github.com/adcondev/scale-daemon/actions)
+[![Release](https://img.shields.io/badge/Release-v0.4.0-blue?style=for-the-badge)](https://github.com/adcondev/scale-daemon/releases)
 
 </div>
 
