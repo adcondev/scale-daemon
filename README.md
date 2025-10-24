@@ -83,7 +83,7 @@ graph TD
 
 ### Installation
 
-1. **Download** the latest installer (`BasculaInstalador_Remoto.exe`) from the [Releases](PLACEHOLDER_URL) page.
+1. **Download** the latest installer (`BasculaInstalador_Remoto.exe`) from the [Releases](https://github.com/adcondev/scale-daemon/releases) page.
 2. **Run as Administrator**.
 3. Follow the on-screen instructions in the interactive TUI to **install**, **start**, and **manage** the service.
 
