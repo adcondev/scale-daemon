@@ -3,7 +3,6 @@
 ![Project Logo](PLACEHOLDER_URL)
 
 [![Language](https://img.shields.io/badge/Go-1.24.6-blue.svg)](https://golang.org/)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](PLACEHOLDER_URL)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A Windows service written in Go that reads data from a serial port and broadcasts it to web clients via WebSockets. It includes an interactive TUI installer for easy deployment and management.
