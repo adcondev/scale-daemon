@@ -66,10 +66,10 @@ graph TD
     B -- ws:// --> E
     B -- ws:// --> F
 
-    style Scale fill:#f9f,stroke:#333,stroke-width:2px
-    style A fill:#bbf,stroke:#333,stroke-width:2px
-    style B fill:#bbf,stroke:#333,stroke-width:2px
-    style Installer fill:#9f9,stroke:#333,stroke-width:2px
+    style Scale fill:violet,stroke:dimgray,stroke-width:2px
+    style A fill:lightblue,stroke:dimgray,stroke-width:2px
+    style B fill:lightblue,stroke:dimgray,stroke-width:2px
+    style Installer fill:lightgreen,stroke:dimgray,stroke-width:2px
 ```
 
 ---
