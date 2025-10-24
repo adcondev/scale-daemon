@@ -55,8 +55,8 @@ Once the service is running, it will host a WebSocket server at `ws://<your-ip>:
 
 1.  **Clone the repository:**
     ```sh
-    git clone https://github.com/adcondev/daemonize-example.git
-    cd daemonize-example
+    git clone https://github.com/adcondev/scale-daemon.git
+    cd scale-daemon
     ```
 2.  **Install dependencies:**
     Run the `init/deps.bat` script as an administrator to install Go, Task, and Go modules.
