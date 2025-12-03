@@ -38,3 +38,21 @@ This project is a Go application designed to run as a Windows service. It reads 
 *   **API Design (WebSocket):** Designed a simple WebSocket-based protocol for real-time communication between the service and web clients.
 *   **Build Automation:** Gained proficiency in using Taskfile for automating build processes.
 *   **Go Language Proficiency:** Deepened understanding of Go's features, including concurrency, modules, and the `embed` directive.
+
+## Advanced Technical Concepts Implemented
+
+*   **Graceful Shutdown & Context Management:**
+    *   Implemented `context.Context` propagation to ensure clean cancellation of goroutines (WebSocket writers, config listeners) when the service stops.
+    *   Integrated with `go-svc` to handle Windows Service Control Manager (SCM) signals (Stop/Shutdown) and gracefully terminate the application.
+
+*   **Event-Driven Architecture (TUI):**
+    *   Adopted The Elm Architecture (Model-View-Update) pattern via the Bubble Tea framework for the installer.
+    *   Managed complex state transitions (Menu -> Processing -> Result -> Confirm) in a purely functional way.
+
+*   **Robust Error Handling & Reconnection:**
+    *   Designed a self-healing serial connection loop that automatically attempts to reconnect upon disconnection or timeout, preventing service failure in unstable hardware environments.
+    *   Implemented exponential backoff (or fixed delay) strategies to avoid tight loops during hardware failures.
+
+*   **JSON-RPC Style Communication:**
+    *   Established a bidirectional JSON-based protocol over WebSockets.
+    *   Clients can send configuration commands (`{"tipo": "config", ...}`) which dynamically update the running service's state (serial port, brand) without a restart.

@@ -77,6 +77,13 @@ This project uses `Taskfile.yml` to automate builds.
     ```
     This creates a test installer (`bin/BasculaInstalador_test.exe`) where the service listens only on `localhost`.
 
+### Test Mode & Simulation
+
+The application includes a built-in simulation mode for development without physical hardware.
+*   **Activation**: Automatically enabled in `test` builds, or can be toggled via the web interface.
+*   **Behavior**: The service generates simulated weight data (random values around a base weight) and broadcasts it via WebSockets.
+*   **Benefit**: Allows frontend and installer development to proceed in parallel with hardware integration.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a pull request or open an issue.
@@ -86,6 +93,15 @@ Contributions are welcome! Please feel free to submit a pull request or open an 
 3.  Commit your changes (`git commit -m 'Add some feature'`).
 4.  Push to the branch (`git push origin feature/your-feature`).
 5.  Open a pull request.
+
+## Troubleshooting
+
+*   **Service Won't Start**: Check if the port 8765 is in use. Run `netstat -ano | findstr 8765`.
+*   **Serial Port Error**: Ensure the configured COM port exists and is not open by another application (like a terminal).
+*   **Logs**:
+    *   **Production**: Logs are printed to stdout (visible if running from console) or captured by the service manager.
+    *   **Test/Dev**: Logs are written to `%PROGRAMDATA%\BasculaServicioTest\BasculaServicioTest.log`.
+*   **Permissions**: The installer and service require Administrator privileges to register with the Windows Service Control Manager.
 
 ## License
 
