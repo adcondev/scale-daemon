@@ -1,108 +1,117 @@
-# Go Serial-to-WebSocket Service
+# Scale Daemon (BasculaServicio)
 
-![Project Logo](PLACEHOLDER_URL)
+![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
+![Go Version](https://img.shields.io/badge/go-1.24+-blue)
+![Platform](https://img.shields.io/badge/platform-windows-lightgrey)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-[![Language](https://img.shields.io/badge/Go-1.24.6-blue.svg)](https://golang.org/)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+**Scale Daemon** is a robust Windows Service designed to bridge the gap between industrial hardware scales and modern web applications. It reads weight data from serial ports (RS232) in real-time and broadcasts it via a high-performance WebSocket server, allowing any web client to display weight readings instantly.
 
-A Windows service written in Go that reads data from a serial port and broadcasts it to web clients via WebSockets. It includes an interactive TUI installer for easy deployment and management.
+It comes with a professional **TUI (Text User Interface) Installer** that simplifies deployment, management, and configuration.
 
-## Architecture
+![Scale Daemon TUI](https://via.placeholder.com/800x400?text=Scale+Daemon+Installer+TUI)
 
-This project consists of two main components:
-1.  **The Windows Service (`service.go`):** A background process that connects to a serial device (like a weighing scale), reads the data, and forwards it to all connected WebSocket clients.
-2.  **The TUI Installer (`installer.go`):** A terminal-based application that allows users to install, manage, and uninstall the Windows service. It embeds the service executable for a single-file distribution.
+## 🏗 Architecture
+
+The system follows a producer-consumer pattern where the service acts as a middleware between the hardware and the frontend.
 
 ```mermaid
-graph TD
-    A[Serial Device] -->|COM Port| B(Windows Service);
-    B -->|WebSocket| C{Web Clients};
-    D[TUI Installer] -- Manages --> B;
+graph LR
+    subgraph Hardware
+        Scale[⚖️ Industrial Scale]
+    end
+
+    subgraph "Windows Service (Go)"
+        SerialReader[🔌 Serial Reader]
+        Broadcaster[📡 WebSocket Broadcaster]
+        Config[⚙️ Config Manager]
+    end
+
+    subgraph Clients
+        Web[💻 Web Dashboard]
+        App[📱 Mobile App]
+    end
+
+    Scale -- RS232 (COM3) --> SerialReader
+    SerialReader -- Weight Data --> Broadcaster
+    Broadcaster -- WS (ws://*:8765) --> Web
+    Broadcaster -- WS (ws://*:8765) --> App
+    
+    Config -. Hot Reload .-> SerialReader
 ```
 
-## Features
+## 🚀 Features
 
-- **Real-time Data Broadcasting:** Instantly stream serial data to multiple web clients.
-- **Windows Service Integration:** Runs as a native, background Windows service.
-- **Interactive TUI Installer:** Easy-to-use terminal interface for installation and service management.
-- **Self-Contained Executable:** The installer embeds the service, making distribution simple.
-- **Environment Aware:** Separate build configurations for production and development environments.
-- **Test Mode:** Includes a data simulation mode for development without physical hardware.
+- **Real-time Broadcasting:** Low-latency weight updates via WebSockets.
+- **Robust Serial Communication:** Automatic reconnection, noise filtering, and timeout handling.
+- **Interactive Installer:** A beautiful CLI tool to Install, Start, Stop, and Uninstall the service.
+- **Hot Configuration:** Change serial ports or scale brands on the fly without restarting the service.
+- **Simulation Mode:** Built-in test mode to simulate weight data for development without hardware.
+- **Multi-Environment:** Separate configurations for Production and Test/Dev environments.
 
-## Installation
+## 📦 Installation
 
-1.  Download the latest installer executable (`BasculaInstalador_prod.exe` or `BasculaInstalador_test.exe`) from the [Releases](https://github.com/adcondev/daemonize-example/releases) page.
-2.  Right-click the installer and select **"Run as administrator"**.
-3.  Follow the on-screen instructions in the terminal interface to install and start the service.
+This project includes a self-contained installer.
 
-## Usage
+1.  **Download** the latest release (`BasculaInstalador_prod.exe`).
+2.  **Run as Administrator** (Required to install Windows Services).
+3.  Use the arrow keys to select **[+] Instalar Servicio**.
+4.  Once installed, select **[>] Iniciar Servicio**.
 
-Once the service is running, it will host a WebSocket server at `ws://<your-ip>:8765`.
+## 🛠 Usage
 
-1.  **Connect a Client:** Use a WebSocket client (like the provided `web/html/index_envs.html` file) to connect to the server.
-2.  **Receive Data:** The client will automatically start receiving data broadcasted from the serial port.
-3.  **Configuration (Optional):** The web interface also allows for runtime configuration of the COM port, device brand, and test mode.
+### WebSocket API
+The service exposes a WebSocket endpoint at `ws://localhost:8765` (or the server's IP).
 
-## Development
+**Message Format (Server -> Client):**
+```json
+"12.50"
+```
+*The server sends the raw weight as a string.*
+
+**Configuration (Client -> Server):**
+You can send a JSON message to configure the service:
+```json
+{
+  "tipo": "config",
+  "puerto": "COM1",
+  "marca": "Rhino",
+  "modoPrueba": false
+}
+```
+
+## 💻 Development
 
 ### Prerequisites
+- Go 1.24+
+- [Task](https://taskfile.dev/) (Taskfile)
 
-- Go 1.24.6+
-- Task
-- A Windows environment
+### Build Commands
 
-### Setup
+We use `Taskfile` to manage builds:
 
-1.  **Clone the repository:**
-    ```sh
-    git clone https://github.com/adcondev/scale-daemon.git
-    cd scale-daemon
-    ```
-2.  **Install dependencies:**
-    Run the `init/deps.bat` script as an administrator to install Go, Task, and Go modules.
+```bash
+# Build for Production (Listens on 0.0.0.0)
+task build:all
 
-### Building
+# Build for Test (Listens on localhost, enables file logging)
+task build:test
 
-This project uses `Taskfile.yml` to automate builds.
+# Build only the service
+task service:build
 
--   **Build for Production:**
-    ```sh
-    task build:all
-    ```
-    This creates a production-ready installer (`bin/BasculaInstalador_prod.exe`) where the service listens on `0.0.0.0`.
+# Build only the installer
+task installer:build
+```
 
--   **Build for Development/Testing:**
-    ```sh
-    task build:test
-    ```
-    This creates a test installer (`bin/BasculaInstalador_test.exe`) where the service listens only on `localhost`.
-
-### Test Mode & Simulation
-
-The application includes a built-in simulation mode for development without physical hardware.
-*   **Activation**: Automatically enabled in `test` builds, or can be toggled via the web interface.
-*   **Behavior**: The service generates simulated weight data (random values around a base weight) and broadcasts it via WebSockets.
-*   **Benefit**: Allows frontend and installer development to proceed in parallel with hardware integration.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a pull request or open an issue.
+## 🤝 Contributing
 
 1.  Fork the repository.
-2.  Create a new branch (`git checkout -b feature/your-feature`).
-3.  Commit your changes (`git commit -m 'Add some feature'`).
-4.  Push to the branch (`git push origin feature/your-feature`).
-5.  Open a pull request.
+2.  Create a feature branch (`git checkout -b feature/amazing-feature`).
+3.  Commit your changes (`git commit -m 'Add amazing feature'`).
+4.  Push to the branch (`git push origin feature/amazing-feature`).
+5.  Open a Pull Request.
 
-## Troubleshooting
+## 📄 License
 
-*   **Service Won't Start**: Check if the port 8765 is in use. Run `netstat -ano | findstr 8765`.
-*   **Serial Port Error**: Ensure the configured COM port exists and is not open by another application (like a terminal).
-*   **Logs**:
-    *   **Production**: Logs are printed to stdout (visible if running from console) or captured by the service manager.
-    *   **Test/Dev**: Logs are written to `%PROGRAMDATA%\BasculaServicioTest\BasculaServicioTest.log`.
-*   **Permissions**: The installer and service require Administrator privileges to register with the Windows Service Control Manager.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Distributed under the MIT License. See `LICENSE` for more information.

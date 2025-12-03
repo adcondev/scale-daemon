@@ -1,58 +1,43 @@
-# Project Technical Summary & Learning
+# Learning & Achievements - Scale Daemon
 
 ## Project Overview
-
-This project is a Go application designed to run as a Windows service. It reads data from a serial port (specifically from a weighing scale) and broadcasts it to web clients via WebSockets. The project also includes a Terminal User Interface (TUI) installer built with the Bubble Tea library, which embeds the main service executable within its binary for a seamless installation experience.
+**Scale Daemon** is a specialized Windows Service designed to interface with industrial scales (specifically Rhino BAR 8RS) via serial port (RS232). It acts as a middleware that reads weight data in real-time and broadcasts it to web clients via a WebSocket server. The project includes a self-contained TUI (Text User Interface) installer that manages the service lifecycle (install, uninstall, start, stop) and embeds the service binary for easy distribution.
 
 ## Tech Stack and Key Technologies
-
-*   **Language:** Go
-*   **Platform:** Windows (designed to run as a Windows Service)
-*   **Build Automation:** Taskfile (`Taskfile.yml`)
-*   **Frontend:** HTML, CSS, JavaScript (for the client-side WebSocket consumer)
-*   **Dependency Management:** Go Modules
+- **Language:** Go (Golang) 1.24+
+- **Platform:** Windows (System Services)
+- **Communication Protocols:**
+  - **Serial (RS232):** For communicating with hardware scales.
+  - **WebSocket:** For real-time data broadcasting to clients.
+- **User Interface:**
+  - **TUI (Text User Interface):** For the installer and management tool.
+  - **HTML/JS:** For the client-side visualization (embedded).
+- **Build & Automation:** Taskfile (Task), Go Modules.
 
 ## Notable Libraries
-
-*   **`go.bug.st/serial`**: Used for serial port communication, which is the core of reading data from the weighing scale.
-*   **`nhooyr.io/websocket`**: A high-performance WebSocket library for Go, used to create the WebSocket server that broadcasts the scale's data to clients.
-*   **`github.com/judwhite/go-svc`**: A library for creating and managing Windows services in Go. This is essential for running the application in the background on Windows.
-*   **`github.com/charmbracelet/bubbletea`**: A powerful framework for building terminal-based user interfaces (TUIs). This is used to create the interactive installer for the service.
-*   **`github.com/charmbracelet/lipgloss`**: Used for styling the TUI, providing a polished and professional look and feel to the installer.
-*   **`//go:embed`**: A Go directive used to embed the service executable directly into the installer, creating a single, self-contained distributable.
+- **[go.bug.st/serial](https://github.com/bugst/go-serial):** Used for robust cross-platform serial port communication. Solved the complexity of configuring baud rates, timeouts, and reading raw bytes from hardware.
+- **[nhooyr.io/websocket](https://github.com/nhooyr/websocket):** A minimal and idiomatic WebSocket library. Used to implement the real-time broadcast server with context support.
+- **[github.com/judwhite/go-svc](https://github.com/judwhite/go-svc):** Abstraction layer for Windows Services. Solved the problem of handling Windows Service Control Manager (SCM) signals (Start, Stop, Pause) cleanly in Go.
+- **[github.com/charmbracelet/bubbletea](https://github.com/charmbracelet/bubbletea):** The Elm Architecture for Go terminal apps. Used to create the interactive, animated installer.
+- **[github.com/charmbracelet/lipgloss](https://github.com/charmbracelet/lipgloss):** For styling the terminal UI (colors, borders, layouts).
 
 ## Major Achievements and Skills Demonstrated
-
-*   **Designed and implemented a Windows service in Go:** Created a robust, long-running application that can be managed by the Windows Service Control Manager.
-*   **Developed a real-time data broadcasting system:** Built a WebSocket server to broadcast data from a serial port to multiple web clients in real-time.
-*   **Created an interactive TUI installer:** Developed a user-friendly installer with a terminal-based interface using the Bubble Tea framework.
-*   **Implemented a self-contained application bundle:** Utilized Go's `embed` directive to package the service executable within the installer, simplifying distribution and installation.
-*   **Managed build automation with Taskfile:** Created a `Taskfile.yml` to automate the build process for different environments (production and test).
-*   **Implemented environment-specific configurations:** Designed the application to be built with different configurations for production and testing environments.
+- **System-Level Programming:**
+  - Designed and implemented a **Windows Service** that runs in the background, handling OS signals and automatic recovery.
+  - Implemented **Serial Port communication** with robust error handling (reconnection logic, timeouts, noise filtering).
+- **Concurrent & Network Programming:**
+  - Built a **concurrent WebSocket broadcaster** that handles multiple connected clients simultaneously without blocking the serial reading loop.
+  - Implemented a **thread-safe configuration hot-swap** mechanism, allowing the service to change serial ports or target devices without restarting.
+- **DevOps & Tooling:**
+  - Created a **self-contained installer** by embedding the service binary into the installer executable using Go's `embed` package (or similar mechanism).
+  - Configured a **multi-environment build system** (Prod vs. Test) using `Taskfile` and linker flags (`-ldflags`) to inject build metadata (version, date, environment).
+- **User Experience (DX/UX):**
+  - Developed a professional **Terminal User Interface (TUI)** for the installer, featuring animated spinners, progress bars, and a menu-driven workflow, significantly improving the deployment experience.
+  - Implemented a **Simulation Mode** for development, allowing the service to generate fake weight data when no physical scale is connected.
 
 ## Skills Gained/Reinforced
-
-*   **Concurrent Programming:** Utilized goroutines and channels to handle concurrent WebSocket connections and serial port reading.
-*   **Systems Programming:** Gained experience in creating and managing Windows services.
-*   **TUI Development:** Learned how to build interactive and user-friendly terminal applications with Bubble Tea.
-*   **API Design (WebSocket):** Designed a simple WebSocket-based protocol for real-time communication between the service and web clients.
-*   **Build Automation:** Gained proficiency in using Taskfile for automating build processes.
-*   **Go Language Proficiency:** Deepened understanding of Go's features, including concurrency, modules, and the `embed` directive.
-
-## Advanced Technical Concepts Implemented
-
-*   **Graceful Shutdown & Context Management:**
-    *   Implemented `context.Context` propagation to ensure clean cancellation of goroutines (WebSocket writers, config listeners) when the service stops.
-    *   Integrated with `go-svc` to handle Windows Service Control Manager (SCM) signals (Stop/Shutdown) and gracefully terminate the application.
-
-*   **Event-Driven Architecture (TUI):**
-    *   Adopted The Elm Architecture (Model-View-Update) pattern via the Bubble Tea framework for the installer.
-    *   Managed complex state transitions (Menu -> Processing -> Result -> Confirm) in a purely functional way.
-
-*   **Robust Error Handling & Reconnection:**
-    *   Designed a self-healing serial connection loop that automatically attempts to reconnect upon disconnection or timeout, preventing service failure in unstable hardware environments.
-    *   Implemented exponential backoff (or fixed delay) strategies to avoid tight loops during hardware failures.
-
-*   **JSON-RPC Style Communication:**
-    *   Established a bidirectional JSON-based protocol over WebSockets.
-    *   Clients can send configuration commands (`{"tipo": "config", ...}`) which dynamically update the running service's state (serial port, brand) without a restart.
+- **Go Concurrency Patterns:** usage of `sync.Mutex`, `channels`, `context`, and `sync.WaitGroup` for graceful shutdowns.
+- **Hardware Interfacing:** Understanding of RS232 communication, baud rates, and binary data parsing.
+- **Windows API:** Interacting with the Windows Service Control Manager (SCM).
+- **TUI Development:** Building modern CLI tools with the Bubbletea framework.
+- **Architecture Design:** Decoupling hardware reading (Producer) from network broadcasting (Consumer).
