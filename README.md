@@ -9,8 +9,6 @@
 
 It comes with a professional **TUI (Text User Interface) Installer** that simplifies deployment, management, and configuration.
 
-![Scale Daemon TUI](https://via.placeholder.com/800x400?text=Scale+Daemon+Installer+TUI)
-
 ## 🏗 Architecture
 
 The system follows a producer-consumer pattern where the service acts as a middleware between the hardware and the frontend.
