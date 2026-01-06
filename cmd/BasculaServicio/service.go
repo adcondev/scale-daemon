@@ -34,6 +34,196 @@ const (
 	serviceNameTest = "BasculaServicioTest"
 )
 
+// Constante para tamaño máximo de logs
+const maxLogSize = 5 * 1024 * 1024 // 5MB
+
+// LogConfig Configuración de logging
+type LogConfig struct {
+	Verbose bool `json:"verbose"`
+}
+
+// Variables globales para logging
+var (
+	logConfig    = LogConfig{Verbose: true}
+	logConfigMux sync.RWMutex
+	logFilePath  string
+	logFile      *os.File
+)
+
+// Prefijos de logs no críticos (se filtran cuando verbose=false)
+var nonCriticalPrefixes = []string{
+	"[~] Modo prueba activado",
+	"[>] Peso enviado",
+	"[!] No se recibió peso significativo",
+	"[i] Configuración sin cambios",
+	"[i] Iniciando escucha",
+	"[i] Terminando escucha",
+	"[+] Cliente conectado",
+	"[-] Cliente desconectado",
+}
+
+// FilteredLogger Logger con filtrado de mensajes no críticos
+type FilteredLogger struct {
+	file *os.File
+	mu   sync.Mutex
+}
+
+func (l *FilteredLogger) Write(p []byte) (n int, err error) {
+	logConfigMux.RLock()
+	verbose := logConfig.Verbose
+	logConfigMux.RUnlock()
+
+	if !verbose {
+		msg := string(p)
+		for _, prefix := range nonCriticalPrefixes {
+			if strings.Contains(msg, prefix) {
+				return len(p), nil // Descarta silenciosamente
+			}
+		}
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.file.Write(p)
+}
+
+// Autorrotación de logs si excede el tamaño máximo
+func rotateLogIfNeeded(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // Archivo no existe, no hay que rotar
+		}
+		return err
+	}
+
+	if info.Size() < maxLogSize {
+		return nil // No excede el límite
+	}
+
+	// Rotar: mantener últimas 1000 líneas
+	lines := readLastNLines(path, 1000)
+	if len(lines) == 0 {
+		return nil
+	}
+
+	content := strings.Join(lines, "\n") + "\n"
+	return os.WriteFile(path, []byte(content), 0666)
+}
+
+// Lectura optimizada de últimas N líneas (reverse seek)
+func readLastNLines(path string, n int) []string {
+	file, err := os.Open(path)
+	if err != nil {
+		return []string{}
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		return []string{}
+	}
+
+	size := stat.Size()
+	if size == 0 {
+		return []string{}
+	}
+
+	// Leer últimos 64KB máximo (suficiente para ~1000 líneas)
+	bufSize := int64(64 * 1024)
+	if size < bufSize {
+		bufSize = size
+	}
+
+	buf := make([]byte, bufSize)
+	_, err = file.Seek(size-bufSize, io.SeekStart)
+	if err != nil {
+		return []string{}
+	}
+
+	_, err = file.Read(buf)
+	if err != nil {
+		return []string{}
+	}
+
+	// Partir en líneas
+	allLines := strings.Split(string(buf), "\n")
+
+	// Limpiar líneas vacías al final
+	for len(allLines) > 0 && allLines[len(allLines)-1] == "" {
+		allLines = allLines[:len(allLines)-1]
+	}
+
+	// Si empezamos a leer a mitad de una línea, descartarla
+	if size > bufSize && len(allLines) > 0 {
+		allLines = allLines[1:]
+	}
+
+	if len(allLines) <= n {
+		return allLines
+	}
+	return allLines[len(allLines)-n:]
+}
+
+// Flush del archivo de logs (mantiene últimas 50 líneas)
+func flushLogFile() error {
+	if logFilePath == "" {
+		return fmt.Errorf("ruta de log no configurada")
+	}
+
+	lines := readLastNLines(logFilePath, 50)
+	content := ""
+	if len(lines) > 0 {
+		content = strings.Join(lines, "\n") + "\n"
+	}
+
+	// Cerrar archivo actual, truncar, reabrir
+	if logFile != nil {
+		logFile.Close()
+	}
+
+	if err := os.WriteFile(logFilePath, []byte(content), 0666); err != nil {
+		return err
+	}
+
+	// Reabrir archivo
+	f, err := os.OpenFile(logFilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		return err
+	}
+
+	logFile = f
+	log.SetOutput(&FilteredLogger{file: f})
+	log.Println("[OK] Logs limpiados")
+
+	return nil
+}
+
+// Obtener tamaño del archivo de logs
+func getLogFileSize() int64 {
+	if logFilePath == "" {
+		return 0
+	}
+	info, err := os.Stat(logFilePath)
+	if err != nil {
+		return 0
+	}
+	return info.Size()
+}
+
+// Obtener estado actual de configuración de logs
+func getLogStatus() map[string]interface{} {
+	logConfigMux.RLock()
+	verbose := logConfig.Verbose
+	logConfigMux.RUnlock()
+
+	return map[string]interface{}{
+		"tipo":    "logStatus",
+		"verbose": verbose,
+		"size":    getLogFileSize(),
+	}
+}
+
 // EnvironmentConfig guarda la configuración específica de entornos
 type EnvironmentConfig struct {
 	Name        string
@@ -44,6 +234,7 @@ type EnvironmentConfig struct {
 }
 
 // TODO: usar campo para Puerto
+// TODO: Agregar prod/local, test/remote
 var envConfigs = map[string]EnvironmentConfig{
 	"prod": {
 		Name:        "PRODUCCIÓN",
@@ -325,56 +516,118 @@ func listenForConfig(ctx context.Context, c *websocket.Conn) {
 			if errors.Is(err, context.Canceled) {
 				log.Println("[i] Contexto del cliente cancelado")
 			} else if websocket.CloseStatus(err) == websocket.StatusNormalClosure || err == io.EOF {
-				log.Println("[i] Cliente cerro la conexion normalmente")
+				log.Println("[i] Cliente cerro la conexión normalmente")
 			} else {
 				log.Printf("[!] Error de lectura: %v", err)
 			}
 			break
 		}
 
-		if tipo, ok := mensaje["tipo"]; ok && tipo == "config" {
-			data, _ := json.Marshal(mensaje)
-			var nuevaConfig Configuracion
-			_ = json.Unmarshal(data, &nuevaConfig)
-
-			mutexConfig.Lock()
-			actual := configActual
-			if nuevaConfig.Puerto == "" {
-				nuevaConfig.Puerto = actual.Puerto
-			}
-			if nuevaConfig.Marca == "" {
-				nuevaConfig.Marca = actual.Marca
-			}
-			// Mantener el ambiente actual
-			nuevaConfig.Ambiente = actual.Ambiente
-			mutexConfig.Unlock()
-
-			log.Printf("[i] Configuracion recibida: %+v", nuevaConfig)
-
-			mutexConfig.Lock()
-			mismoPuerto := nuevaConfig.Puerto == configActual.Puerto
-			mismaMarca := nuevaConfig.Marca == configActual.Marca
-			mismoModo := nuevaConfig.ModoPrueba == configActual.ModoPrueba
-			mutexConfig.Unlock()
-
-			if !mismoPuerto || !mismaMarca || !mismoModo {
-				log.Println("[*] Cambiando configuracion...")
-				mutexSerial.Lock()
-				if serialPort != nil {
-					log.Println("[.] Cerrando puerto serial...")
-					serialPort.Close()
-					serialPort = nil
-				}
-				mutexSerial.Unlock()
-
-				mutexConfig.Lock()
-				configActual = nuevaConfig
-				mutexConfig.Unlock()
-				log.Println("[OK] Configuracion actualizada")
-			} else {
-				log.Println("[i] Configuracion sin cambios")
-			}
+		tipo, ok := mensaje["tipo"].(string)
+		if !ok {
+			continue
 		}
+
+		// Switch para manejar diferentes tipos de mensajes
+		switch tipo {
+		case "config":
+			handleConfigMessage(mensaje)
+		// Handler para configuración de logs
+		case "logConfig":
+			if v, ok := mensaje["verbose"].(bool); ok {
+				logConfigMux.Lock()
+				logConfig.Verbose = v
+				logConfigMux.Unlock()
+				log.Printf("[OK] Verbosidad de logs: %v", v)
+
+				// Enviar confirmación con estado actual
+				ctx3, cancel3 := context.WithTimeout(ctx, time.Second)
+				_ = wsjson.Write(ctx3, c, getLogStatus())
+				cancel3()
+			}
+		// Handler para flush de logs
+		case "logFlush":
+			if err := flushLogFile(); err != nil {
+				log.Printf("[X] Error en flush de logs: %v", err)
+				ctx3, cancel3 := context.WithTimeout(ctx, time.Second)
+				_ = wsjson.Write(ctx3, c, map[string]interface{}{
+					"tipo":  "logFlushResult",
+					"ok":    false,
+					"error": err.Error(),
+				})
+				cancel3()
+			} else {
+				ctx3, cancel3 := context.WithTimeout(ctx, time.Second)
+				_ = wsjson.Write(ctx3, c, map[string]interface{}{
+					"tipo": "logFlushResult",
+					"ok":   true,
+				})
+				cancel3()
+			}
+		// Handler para tail de logs
+		case "logTail":
+			lines := 100
+			if n, ok := mensaje["lines"].(float64); ok {
+				lines = int(n)
+			}
+			tailLines := readLastNLines(logFilePath, lines)
+
+			ctx3, cancel3 := context.WithTimeout(ctx, time.Second)
+			_ = wsjson.Write(ctx3, c, map[string]interface{}{
+				"tipo":  "logLines",
+				"lines": tailLines,
+			})
+			cancel3()
+		// Handler para obtener estado de logs
+		case "logStatus":
+			ctx3, cancel3 := context.WithTimeout(ctx, time.Second)
+			_ = wsjson.Write(ctx3, c, getLogStatus())
+			cancel3()
+		}
+	}
+}
+
+// Función extraída para manejar mensajes de configuración
+func handleConfigMessage(mensaje map[string]interface{}) {
+	data, _ := json.Marshal(mensaje)
+	var nuevaConfig Configuracion
+	_ = json.Unmarshal(data, &nuevaConfig)
+
+	mutexConfig.Lock()
+	actual := configActual
+	if nuevaConfig.Puerto == "" {
+		nuevaConfig.Puerto = actual.Puerto
+	}
+	if nuevaConfig.Marca == "" {
+		nuevaConfig.Marca = actual.Marca
+	}
+	nuevaConfig.Ambiente = actual.Ambiente
+	mutexConfig.Unlock()
+
+	log.Printf("[i] Configuración recibida: %+v", nuevaConfig)
+
+	mutexConfig.Lock()
+	mismoPuerto := nuevaConfig.Puerto == configActual.Puerto
+	mismaMarca := nuevaConfig.Marca == configActual.Marca
+	mismoModo := nuevaConfig.ModoPrueba == configActual.ModoPrueba
+	mutexConfig.Unlock()
+
+	if !mismoPuerto || !mismaMarca || !mismoModo {
+		log.Println("[*] Cambiando configuración...")
+		mutexSerial.Lock()
+		if serialPort != nil {
+			log.Println("[.] Cerrando puerto serial...")
+			serialPort.Close()
+			serialPort = nil
+		}
+		mutexSerial.Unlock()
+
+		mutexConfig.Lock()
+		configActual = nuevaConfig
+		mutexConfig.Unlock()
+		log.Println("[OK] Configuración actualizada")
+	} else {
+		log.Println("[i] Configuración sin cambios")
 	}
 }
 
@@ -408,28 +661,44 @@ func manejarCliente(w http.ResponseWriter, r *http.Request) {
 	log.Println("[-] Cliente desconectado")
 }
 
+// Init con logging a archivo en ambos ambientes y rotación
 func (p *Program) Init(env svc.Environment) error {
 	envConfig := getEnvConfig()
 
-	// Solo escribir a archivo en test/dev
-	if BuildEnvironment == "test" {
-		logFile := filepath.Join(os.Getenv("PROGRAMDATA"), envConfig.ServiceName, envConfig.ServiceName+".log")
-		err := os.MkdirAll(filepath.Dir(logFile), 0755)
-		if err != nil {
-			return err
-		}
-		f, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-		if err != nil {
-			return err
-		}
-		log.SetOutput(f)
-	} else {
-		// En prod, logs van a consola (stdout)
-		log.SetOutput(os.Stdout)
+	// Configurar ruta del archivo de logs
+	logFilePath = filepath.Join(os.Getenv("PROGRAMDATA"), envConfig.ServiceName, envConfig.ServiceName+".log")
+
+	// Crear directorio si no existe
+	if err := os.MkdirAll(filepath.Dir(logFilePath), 0755); err != nil {
+		return err
 	}
+
+	// Auto-rotar si excede 5MB
+	if err := rotateLogIfNeeded(logFilePath); err != nil {
+		// No es crítico, continuar
+		fmt.Printf("[!] Error en rotación de logs: %v\n", err)
+	}
+
+	// Abrir archivo de logs
+	f, err := os.OpenFile(logFilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		return err
+	}
+	logFile = f
+
+	// Usar logger filtrado
+	log.SetOutput(&FilteredLogger{file: f})
+
+	// Default: prod = no verbose, test = verbose
+	logConfigMux.Lock()
+	logConfig.Verbose = (BuildEnvironment == "test")
+	logConfigMux.Unlock()
 
 	log.Printf("[i] Iniciando Servicio - Ambiente: %s", envConfig.Name)
 	log.Printf("[i] Build: %s %s", BuildDate, BuildTime)
+	log.Printf("[i] Logs en: %s", logFilePath)
+	log.Printf("[i] Verbose: %v", logConfig.Verbose)
+
 	return nil
 }
 
