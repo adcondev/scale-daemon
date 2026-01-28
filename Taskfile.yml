@@ -1,68 +1,36 @@
 # https://taskfile.dev
-# Scale Daemon - Task Runner para Dev & Testing
-# Dev: Adrián Constante @ Red2000 2025
-#
-# USO RÁPIDO:
-#   task              - Ver todas las tareas disponibles
-#   task dev          - Setup completo para desarrollo
-#   task test         - Correr todos los tests
-#   task build: test   - Compilar versión de pruebas
-#
+# Scale Daemon - Task Runner
+# Dev: Adrián Constante @ Red2000 2026
+
 version: '3'
 
-# usar silent: false para debug
 silent: true
 
-# =============================================================================
-# VARIABLES GLOBALES
-# =============================================================================
 vars:
-  # Nombres de componentes
-  SERVICE_NAME: BasculaServicio
-  INSTALLER_NAME: BasculaInstalador
+  SERVICE_NAME: R2k_BasculaServicio
+  INSTALLER_NAME: R2k_BasculaInstalador
 
-  # Rutas
-  SERVICE_PATH: ./cmd/{{.SERVICE_NAME}}/service.go
-  INSTALLER_PATH: ./cmd/{{.INSTALLER_NAME}}/installer.go
+  BINARY_LOCAL: BasculaServicio_Local.exe
+  BINARY_REMOTE: BasculaServicio_Remote.exe
+
+  # Output names (R2k prefix convention)
+  INSTALLER_LOCAL: R2k_Instalador_Bascula_Local.exe
+  INSTALLER_REMOTE: R2k_Instalador_Bascula_Remote.exe
+
+  # Directories
   BIN_DIR: ./bin
-  LOGS_DIR: '{{.PROGRAMDATA | default "/tmp"}}/{{.SERVICE_NAME}}'
+  EMBED_DIR: ./embedded/bin
 
-  # Build info (inyectado en tiempo de compilación)
-  BUILD_ENV: '{{.BUILD_ENV | default "test"}}'
-  BUILD_DATE: '{{now | date "2006-01-02"}}'
-  BUILD_TIME: '{{now | date "15:04:05"}}'
-  VERSION: '1.1.0'
+  VERSION: '1.2.0'
 
-  # Build tags según ambiente
-  TEST_BUILD_TAG: test_build
-  PROD_BUILD_TAG: prod_build
-
-  # Colores para output (ANSI)
-  GREEN: '\033[0;32m'
-  YELLOW: '\033[0;33m'
-  RED: '\033[0;31m'
-  BLUE: '\033[0;34m'
-  NC: '\033[0m'
-
-# =============================================================================
-# VARIABLES DE ENTORNO
-# =============================================================================
 env:
-  # Go
   CGO_ENABLED: '0'
   GOOS: windows
   GOARCH: amd64
 
-  # Testing
-  RUN_INTEGRATION_TESTS: '{{.RUN_INTEGRATION_TESTS | default "1"}}'
-
-# =============================================================================
-# TAREA DEFAULT - MOSTRAR AYUDA
-# =============================================================================
 tasks:
   default:
-    desc: "📋 Mostrar todas las tareas disponibles"
-    silent: true
+    desc: "📋 Show all available tasks"
     cmds:
       - |
         echo ""
@@ -70,356 +38,147 @@ tasks:
         echo "║           SCALE DAEMON - Task Runner v{{.VERSION}}              ║"
         echo "╚═══════════════════════════════════════════════════════════╝"
         echo ""
-        echo "🚀 INICIO RÁPIDO:"
-        echo "   task dev          Configurar entorno de desarrollo"
-        echo "   task build:test   Compilar versión TEST"
-        echo "   task test         Ejecutar todos los tests"
+        echo "🚀 QUICK START:"
+        echo "   task build:local   Build LOCAL installer (localhost:8765)"
+        echo "   task build:remote  Build REMOTE installer (0.0.0.0:8765)"
+        echo "   task build:all     Build both installers"
         echo ""
       - task --list-all
 
   # ===========================================================================
-  # 🔧 SETUP & DEPENDENCIES
+  # 📦 DEPENDENCIES
   # ===========================================================================
   deps:
-    desc: "📦 Descargar e instalar dependencias de Go"
+    desc: "📦 Download and install Go dependencies"
     cmds:
-      - echo "📦 Descargando dependencias..."
+      - echo "📦 Downloading dependencies..."
       - go mod download
       - go mod tidy
       - go mod verify
-      - echo "✅ Dependencias instaladas"
-
-  deps:tools:
-    desc: "🛠️ Instalar herramientas de desarrollo (golangci-lint, etc)"
-    cmds:
-      - echo "🛠️ Instalando herramientas..."
-      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-      - go install golang.org/x/tools/cmd/goimports@latest
-      - echo "✅ Herramientas instaladas"
-
-  dev:
-    desc: "🚀 Setup completo para desarrollo (deps + build test)"
-    cmds:
-      - task: deps
-      - task: build:test
-      - echo ""
-      - echo "✅ Entorno de desarrollo listo!"
-      - echo ""
-      - echo "Próximos pasos:"
-      - echo "  1. task install:test    - Instalar servicio de prueba"
-      - echo "  2. task run:installer   - Ejecutar el instalador TUI"
-      - echo "  3. task test            - Correr tests"
+      - echo "✅ Dependencies installed"
 
   # ===========================================================================
-  # 🏗️ BUILD
+  # 🏗️ SERVICE BUILD
   # ===========================================================================
-  service:build:
-    desc: "🔨 Compilar servicio Windows"
+  service:build:local:
+    desc: "🔨 Build Service for LOCAL (localhost:8765)"
     vars:
-      BUILD_ENV: '{{.BUILD_ENV | default "prod"}}'
       BUILD_DATE:
         sh: powershell -Command "Get-Date -Format 'yyyy-MM-dd'"
       BUILD_TIME:
         sh: powershell -Command "Get-Date -Format 'HH:mm:ss'"
     cmds:
-      - mkdir -p embedded/bin
-      - go build -ldflags "-s -w -H=windowsgui -X main.BuildEnvironment={{.BUILD_ENV}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o embedded/bin/BasculaServicio.exe ./cmd/BasculaServicio
-      - echo "✅ Servicio compilado embedded/bin/BasculaServicio.exe ({{.BUILD_ENV}})"
-    generates:
-      - embedded/bin/BasculaServicio.exe
+      - mkdir -p {{.EMBED_DIR}}
+      - go build -ldflags "-s -w -H=windowsgui -X main.BuildEnvironment=local -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.EMBED_DIR}}/{{.BINARY_LOCAL}}.exe ./cmd/BasculaServicio
+      - echo "✅ Service compiled for LOCAL (localhost:8765)"
 
-  installer:build:
-    desc: "🔨 Compilar instalador TUI con servicio embebido"
+  service:build:remote:
+    desc: "🔨 Build Service for REMOTE (0.0.0.0:8765)"
     vars:
-      BUILD_ENV: '{{.BUILD_ENV | default "prod"}}'
-      BUILD_TAG: '{{if eq .BUILD_ENV "test"}}test_build{{else}}prod_build{{end}}'
-      OUT_FILE: 'bin/{{.INSTALLER_NAME}}_{{.BUILD_ENV}}.exe'
       BUILD_DATE:
         sh: powershell -Command "Get-Date -Format 'yyyy-MM-dd'"
       BUILD_TIME:
         sh: powershell -Command "Get-Date -Format 'HH:mm:ss'"
     cmds:
-      - task: service:build
-        vars:
-          BUILD_ENV: '{{.BUILD_ENV}}'
-      - mkdir -p bin
-      - go build -tags {{.BUILD_TAG}} -ldflags "-s -w -X main.BuildEnvironment={{.BUILD_ENV}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.OUT_FILE}} ./cmd/BasculaInstalador
-      - echo "✅ Instalador compilado {{.OUT_FILE}} ({{.BUILD_ENV}}) con tag {{.BUILD_TAG}}"
-    sources:
-      - ./cmd/BasculaInstalador/**/*.go
-      - embedded/bin/BasculaServicio.exe
-    generates:
-      - '{{.OUT_FILE}}'
+      - mkdir -p {{.EMBED_DIR}}
+      - go build -ldflags "-s -w -H=windowsgui -X main.BuildEnvironment=remote -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.EMBED_DIR}}/BasculaServicio.exe ./cmd/BasculaServicio
+      - echo "✅ Service compiled for REMOTE (0.0.0.0:8765)"
 
-  build:test:
-    desc: "🧪 Compilar TODO para TEST (localhost: 8765)"
+  # ===========================================================================
+  # 📦 INSTALLER BUILD
+  # ===========================================================================
+  installer:local:
+    desc: "📦 Build Installer with LOCAL service embedded"
+    deps: [service:build:local]
+    vars:
+      BUILD_DATE:
+        sh: powershell -Command "Get-Date -Format 'yyyy-MM-dd'"
+      BUILD_TIME:
+        sh: powershell -Command "Get-Date -Format 'HH:mm:ss'"
     cmds:
-      - task: installer:build
-        vars: { BUILD_ENV: test }
-      - echo ""
-      - echo "╔══════════════════════════════════════════╗"
-      - echo "║   ✅ BUILD TEST COMPLETADO                ║"
-      - echo "║  ➡️ ./bin/{{.INSTALLER_NAME}}_test.exe      ║"
-      - echo "║  ➡️ Escucha en:localhost:8765             ║"
-      - echo "║  ➡️ Build tag:test_build                  ║"
-      - echo "╚══════════════════════════════════════════╝"
+      - mkdir -p {{.BIN_DIR}}
+      - go build -ldflags "-s -w -X main.BuildEnvironment=local -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.BIN_DIR}}/{{.INSTALLER_LOCAL}} ./cmd/BasculaInstalador
+      - echo "📦 Created {{.BIN_DIR}}/{{.INSTALLER_LOCAL}}"
 
-  build:prod:
-    desc: "🚀 Compilar TODO para PRODUCCIÓN (0.0.0.0:8765)"
+  installer:remote:
+    desc: "📦 Build Installer with REMOTE service embedded"
+    deps: [service:build:remote]
+    vars:
+      BUILD_DATE:
+        sh: powershell -Command "Get-Date -Format 'yyyy-MM-dd'"
+      BUILD_TIME:
+        sh: powershell -Command "Get-Date -Format 'HH:mm:ss'"
     cmds:
-      - task: installer:build
-        vars: { BUILD_ENV: prod }
+      - mkdir -p {{.BIN_DIR}}
+      - go build -ldflags "-s -w -X main.BuildEnvironment=remote -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.BIN_DIR}}/{{.INSTALLER_REMOTE}} ./cmd/BasculaInstalador
+      - echo "📦 Created {{.BIN_DIR}}/{{.INSTALLER_REMOTE}}"
+
+  # ===========================================================================
+  # 🚀 HIGH-LEVEL BUILD COMMANDS
+  # ===========================================================================
+  build:local:
+    desc: "🏠 Build everything for LOCAL environment"
+    cmds:
+      - task: installer:local
       - echo ""
-      - echo "╔═════════════════════════════════════════╗"
-      - echo "║   ✅ BUILD PROD COMPLETADO               ║"
-      - echo "║  ➡️ ./bin/{{.INSTALLER_NAME}}_prod.exe     ║"
-      - echo "║  ➡️ Escucha en:0.0.0.0:8765              ║"
-      - echo "║  ➡️ Build tag:prod_build                 ║"
-      - echo "╚═════════════════════════════════════════╝"
+      - echo "╔════════════════════════════════════════╗"
+      - echo "║   ✅ LOCAL BUILD COMPLETE              ║"
+      - echo "║   → {{.BIN_DIR}}/{{.INSTALLER_LOCAL}}  ║"
+      - echo "║   → Listens on localhost:8765          ║"
+      - echo "╚════════════════════════════════════════╝"
+
+  build:remote:
+    desc: "🌐 Build everything for REMOTE environment"
+    cmds:
+      - task: installer:remote
+      - echo ""
+      - echo "╔════════════════════════════════════════╗"
+      - echo "║   ✅ REMOTE BUILD COMPLETE             ║"
+      - echo "║   → {{.BIN_DIR}}/{{.INSTALLER_REMOTE}} ║"
+      - echo "║   → Listens on 0.0.0.0:8765            ║"
+      - echo "╚═════════��══════════════════════════════╝"
 
   build:all:
-    desc: "🏗️ Compilar ambos ambientes (test + prod)"
+    desc: "🏗️ Build both LOCAL and REMOTE installers"
     cmds:
-      - task: build:test
-      - task: build:prod
+      - task: build:local
+      - task: build:remote
       - echo ""
-      - echo "✅ Ambos builds completados!"
+      - echo "╔════════════════════════════════════════╗"
+      - echo "║   ✅ ALL BUILDS COMPLETE               ║"
+      - echo "╚════════════════════════════════════════╝"
       - ls -la {{.BIN_DIR}}/*.exe
 
   # ===========================================================================
   # 🧪 TESTING
   # ===========================================================================
   test:
-    desc: "🧪 Ejecutar TODOS los tests (unit + integration si RUN_INTEGRATION_TESTS=1)"
+    desc: "🧪 Run all tests"
     cmds:
-      - echo "🧪 Ejecutando tests con tag test_build..."
-      - go test -tags test_build -v -cover ./...
-    env:
-      RUN_INTEGRATION_TESTS: '{{.RUN_INTEGRATION_TESTS | default "0"}}'
+      - echo "🧪 Running tests..."
+      - go test -v ./...
 
   test:unit:
-    desc: "🧪 Ejecutar solo tests unitarios (rápido)"
+    desc: "🧪 Run unit tests only (fast)"
     cmds:
-      - echo "🧪 Tests unitarios con tag test_build..."
-      - go test -tags test_build -v -short ./...
-
-  test:integration:
-    desc: "🔌 Ejecutar tests de integración (requiere servicio corriendo)"
-    cmds:
-      - echo "🔌 Tests de integración con tag test_build..."
-      - echo "⚠️ Asegúrate de que el servicio esté corriendo (task service:start)"
-      - go test -tags test_build -v -run "Integration" ./...
-    env:
-      RUN_INTEGRATION_TESTS: '1'
-
-  test:memory:
-          desc: "🧠 Test de memory leaks en polling"
-          cmds:
-            - echo "🧠 Test de memory leaks con tag test_build..."
-            - go test -tags test_build -v -run "TestNoMemoryLeakInPolling" -timeout 5m ./...
-
-  test:resize:
-    desc: "📐 Test de resize de terminal"
-    cmds:
-      - echo "📐 Tests de resize con tag test_build..."
-      - go test -tags test_build -v -run "TestTerminalResize" ./...
-
-  test:rotation:
-    desc: "🔄 Test de rotación de logs"
-    cmds:
-      - echo "🔄 Tests de rotación con tag test_build..."
-      - go test -tags test_build -v -run "TestLogRotation" ./...
-    env:
-      RUN_INTEGRATION_TESTS: '1'
-
-  test:verbose:
-    desc: "🔊 Test de toggle verbose"
-    cmds:
-      - echo "🔊 Tests de verbose con tag test_build..."
-      - go test -tags test_build -v -run "TestVerboseToggle" ./...
-    env:
-      RUN_INTEGRATION_TESTS: '1'
-
-  test:fase3:
-    desc: "📋 Ejecutar TODOS los tests de Fase 3 (requiere servicio)"
-    cmds:
-      - echo "╔═══════════════════════════════════════╗"
-      - echo "║     FASE 3:TESTING COMPLETO           ║"
-      - echo "║     (usando tag:test_build)            ║"
-      - echo "╚═══════════════════════════════════════╝"
-      - echo ""
-      - task: test:rotation
-      - task: test:verbose
-      - task: test:memory
-      - task: test:resize
-      - echo ""
-      - echo "✅ Fase 3 completada!"
-    env:
-      RUN_INTEGRATION_TESTS: '1'
-
-  test:prod:
-    desc:  "🧪 Ejecutar tests con build tag de producción"
-    cmds:
-      - echo "🧪 Ejecutando tests con tag prod_build..."
-      - go test -tags prod_build -v -cover ./...
-    env:
-      RUN_INTEGRATION_TESTS: '{{.RUN_INTEGRATION_TESTS | default "0"}}'
+      - echo "🧪 Unit tests..."
+      - go test -v -short ./...
 
   bench:
-    desc: "⚡ Ejecutar benchmarks"
+    desc: "⚡ Run benchmarks"
     cmds:
-      - echo "⚡ Benchmarks con tag test_build..."
-      - go test -tags test_build -bench=. -benchmem ./...
-
-  bench:prod:
-    desc: "⚡ Ejecutar benchmarks con tag de producción"
-    cmds:
-      - echo "⚡ Benchmarks con tag prod_build..."
-      - go test -tags prod_build -bench=. -benchmem ./...
+      - echo "⚡ Running benchmarks..."
+      - go test -bench=. -benchmem ./...
 
   # ===========================================================================
-  # 🖥️ EJECUCIÓN LOCAL
-  # ===========================================================================
-  run:installer:
-    desc: "▶️ Ejecutar el instalador TUI (modo test)"
-    deps:  [build:test]
-    cmds:
-      - echo "▶️ Iniciando instalador..."
-      - '{{.BIN_DIR}}/{{.INSTALLER_NAME}}_test.exe'
-
-  run:installer:prod:
-    desc: "▶️ Ejecutar el instalador TUI (modo producción)"
-    deps: [build:prod]
-    cmds:
-      - echo "▶️ Iniciando instalador (PROD)..."
-      - '{{.BIN_DIR}}/{{.INSTALLER_NAME}}_prod.exe'
-
-  # ===========================================================================
-  # 🔧 GESTIÓN DEL SERVICIO (requiere Admin)
-  # ===========================================================================
-  service:status:
-    desc: "📊 Ver estado del servicio"
-    cmds:
-      - sc query {{.SERVICE_NAME}}Test 2>/dev/null || echo "Servicio no instalado"
-
-  service:start:
-    desc: "▶️ Iniciar el servicio (requiere Admin)"
-    cmds:
-      - echo "▶️ Iniciando servicio..."
-      - sc start {{.SERVICE_NAME}}Test
-
-  service:stop:
-    desc: "⏹️ Detener el servicio (requiere Admin)"
-    cmds:
-      - echo "⏹️ Deteniendo servicio..."
-      - sc stop {{.SERVICE_NAME}}Test
-
-  service:restart:
-    desc: "🔄 Reiniciar el servicio (requiere Admin)"
-    cmds:
-      - task: service:stop
-      - sleep 2
-      - task: service:start
-
-  service:logs:
-    desc: "📜 Ver últimas líneas del log del servicio"
-    cmds:
-      - |
-        LOG_PATH="$PROGRAMDATA/{{.SERVICE_NAME}}Test/{{.SERVICE_NAME}}Test.log"
-        if [ -f "$LOG_PATH" ]; then
-          tail -50 "$LOG_PATH"
-        else
-          echo "Archivo de log no encontrado: $LOG_PATH"
-        fi
-
-  service:logs:follow:
-    desc: "📜 Seguir logs en tiempo real (tail -f)"
-    cmds:
-      - |
-        LOG_PATH="$PROGRAMDATA/{{.SERVICE_NAME}}Test/{{.SERVICE_NAME}}Test.log"
-        tail -f "$LOG_PATH"
-
-  # ===========================================================================
-  # 🧹 LIMPIEZA
+  # 🧹 CLEANUP
   # ===========================================================================
   clean:
-    desc: "🧹 Limpiar archivos compilados"
+    desc: "🧹 Remove all build artifacts"
     cmds:
-      - echo "🧹 Limpiando..."
-      - rm -rf {{.BIN_DIR}}
-      - rm -rf embedded/bin
-      - go clean -cache
-      - echo "✅ Limpieza completada"
-
-  clean:logs:
-    desc: "🧹 Limpiar logs del servicio"
-    cmds:
-      - |
-        LOG_PATH="$PROGRAMDATA/{{.SERVICE_NAME}}Test"
-        rm -rf "$LOG_PATH"/*.log
-        echo "✅ Logs limpiados"
-
-  # ===========================================================================
-  # 📋 CALIDAD DE CÓDIGO
-  # ===========================================================================
-  lint:
-    desc: "🔍 Ejecutar linter (golangci-lint)"
-    cmds:
-      - golangci-lint run --build-tags test_build ./...
-
-  lint:prod:
-    desc: "🔍 Ejecutar linter con tag de producción"
-    cmds:
-      - golangci-lint run --build-tags prod_build ./...
-
-  fmt:
-    desc: "✨ Formatear código (gofmt + goimports)"
-    cmds:
-      - gofmt -w .
-      - goimports -w .
-      - echo "✅ Código formateado"
-
-  vet:
-    desc: "🔍 Ejecutar go vet"
-    cmds:
-      - go vet -tags test_build ./...
-
-  vet:prod:
-        desc: "🔍 Ejecutar go vet con tag de producción"
-        cmds:
-          - go vet -tags prod_build ./...
-
-  check:
-    desc: "✅ Verificación completa (fmt + vet + lint + test)"
-    cmds:
-      - task: fmt
-      - task: vet
-      - task: lint
-      - task: test:unit
-      - echo ""
-      - echo "✅ Todas las verificaciones pasaron!"
-
-  check:prod:
-    desc: "✅ Verificación completa para producción"
-    cmds:
-      - task: fmt
-      - task: vet:prod
-      - task: lint:prod
-      - task: test:prod
-      - echo ""
-      - echo "✅ Todas las verificaciones de PROD pasaron!"
-
-  # ===========================================================================
-  # 📦 RELEASE
-  # ===========================================================================
-  release:
-    desc: "📦 Crear release (limpia, verifica, compila prod)"
-    cmds:
-      - task: clean
-      - task: check:prod
-      - task: build:prod
-      - echo ""
-      - echo "╔═══════════════════════════════════════╗"
-      - echo "║     📦 RELEASE LISTO                  ║"
-      - echo "╚═══════════════════════════════════════╝"
-      - ls -la {{.BIN_DIR}}/*_prod.exe
+      - echo "🧹 Cleaning..."
+      - cmd: if exist {{.BIN_DIR}} rmdir /s /q {{.BIN_DIR}}
+        ignore_error: true
+      - cmd: if exist {{.EMBED_DIR}} rmdir /s /q {{.EMBED_DIR}}
+        ignore_error: true
+      - echo "✅ Clean complete"

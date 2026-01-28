@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,10 +11,6 @@ import (
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/viewport"
-	"nhooyr.io/websocket"
-	"nhooyr.io/websocket/wsjson"
-
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,7 +21,7 @@ import (
 
 // Variable de build - via ldflags
 var (
-	BuildEnvironment = "prod"
+	BuildEnvironment = "remote"
 	BuildDate        = "unknown"
 	BuildTime        = "unknown"
 )
@@ -46,38 +40,38 @@ const (
 
 // Obtener nombre de servicio segun entorno
 func getServiceName() string {
-	if BuildEnvironment == "test" {
+	if BuildEnvironment == "local" {
 		return serviceNameTest
 	}
 	return serviceName
 }
 
 func getServiceDisplayName() string {
-	if BuildEnvironment == "test" {
-		return serviceDisplayName + "TEST"
+	if BuildEnvironment == "local" {
+		return serviceDisplayName + " LOCAL"
 	}
-	return serviceDisplayName + "PROD"
+	return serviceDisplayName + " REMOTE"
 }
 
 // Environment colors
 func getEnvironmentColors() (primary, secondary lipgloss.Color) {
-	if BuildEnvironment == "test" {
-		// TEST: Verde y Amarillo
+	if BuildEnvironment == "local" {
+		// LOCAL: Verde y Amarillo
 		return "#00FF40", "#FFD700"
 	}
-	// PROD: Rojo y Azul
+	// REMOTE: Rojo y Azul
 	return "#FF0040", "#0080FF"
 }
 
 func getBanner() string {
-	envLabel := "PROD"
-	if BuildEnvironment == "test" {
-		envLabel = "TEST"
+	envLabel := "REMOTE"
+	if BuildEnvironment == "local" {
+		envLabel = "LOCAL"
 	}
 
 	return fmt.Sprintf(`
 ╔═════════════════════════════════════════════╗
-║             SCALE DAEMON v1.1.0             ║
+║             SCALE DAEMON v1.2.0             ║
 ║                                             ║
 ║     ____     /                _             ║
 ║    | __ )  __ _ ___  ___ _  _| | __ _       ║
@@ -86,7 +80,7 @@ func getBanner() string {
 ║    |____/ \__,_|___/\___|\_,_|_|\__,_|      ║
 ║                                             ║
 ║           Instalador de Servicio            ║
-║           (C) 2025 Red2000 - %s           ║
+║           (C) 2025 Red2000 - %s          ║
 ╚═════════════════════════════════════════════╝`,
 		envLabel,
 	)
@@ -94,19 +88,16 @@ func getBanner() string {
 
 // Estilos con más colores y variedad
 var (
-	// Colores principales - esquema rojo/azul
 	primaryColor, secondaryColor = getEnvironmentColors()
-	darkColor                    = lipgloss.Color("#1a1b26") // Fondo oscuro
-	lightColor                   = lipgloss.Color("#c0caf5") // Texto claro
-	warningColor                 = lipgloss.Color("#ff9e64") // Naranja
-	errorColor                   = lipgloss.Color("#f7768e") // Rojo error
-	successColor                 = lipgloss.Color("#9ece6a") // Verde éxito
-	infoColor                    = lipgloss.Color("#7aa2f7") // Azul info
+	darkColor                    = lipgloss.Color("#1a1b26")
+	lightColor                   = lipgloss.Color("#c0caf5")
+	warningColor                 = lipgloss.Color("#ff9e64")
+	errorColor                   = lipgloss.Color("#f7768e")
+	successColor                 = lipgloss.Color("#9ece6a")
+	infoColor                    = lipgloss.Color("#7aa2f7")
 
-	// Banner ASCII
 	banner = getBanner()
 
-	// Estilos mejorados
 	bannerStyle = lipgloss.NewStyle().
 			Foreground(primaryColor).
 			Bold(true)
@@ -149,12 +140,6 @@ var (
 			Background(darkColor).
 			Foreground(lightColor).
 			Padding(0, 1)
-
-	// Estilo para el visor de logs
-	logViewerStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(infoColor).
-			Padding(0, 1)
 )
 
 // Implementación de item para la lista
@@ -172,13 +157,12 @@ func (i menuItem) FilterValue() string { return i.title }
 
 // KeyMap personalizado para navegación
 type keyMap struct {
-	Up        key.Binding
-	Down      key.Binding
-	Enter     key.Binding
-	Help      key.Binding
-	Quit      key.Binding
-	Restart   key.Binding
-	ToggleLog key.Binding
+	Up      key.Binding
+	Down    key.Binding
+	Enter   key.Binding
+	Help    key.Binding
+	Quit    key.Binding
+	Restart key.Binding
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
@@ -189,8 +173,7 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down},
 		{k.Enter, k.Restart},
-		{k.ToggleLog, k.Help},
-		{k.Quit},
+		{k.Help, k.Quit},
 	}
 }
 
@@ -211,10 +194,6 @@ var keys = keyMap{
 		key.WithKeys("r"),
 		key.WithHelp("r", "reiniciar servicio"),
 	),
-	ToggleLog: key.NewBinding(
-		key.WithKeys("l"),
-		key.WithHelp("l", "ver logs"),
-	),
 	Help: key.NewBinding(
 		key.WithKeys("?"),
 		key.WithHelp("?", "ayuda"),
@@ -232,16 +211,8 @@ const (
 	processingScreen
 	resultScreen
 	confirmScreen
-	logsMenuScreen // Submenú de logs
-	logsViewScreen // Visor de logs en vivo
+	logsMenuScreen
 )
-
-// Tipos de mensajes para logs
-type logLinesMsg []string
-type logStatusMsg struct {
-	Verbose bool
-	Size    int64
-}
 
 type model struct {
 	screen          screen
@@ -264,31 +235,16 @@ type model struct {
 	showHelp        bool
 	animationFrame  int
 	ready           bool
-
-	// Campos para gestión de logs
-	viewport       viewport.Model
-	logLines       []string
-	logVerbose     bool
-	logSize        int64
-	wsConn         *websocket.Conn
-	logsConnected  bool
-	previousScreen screen     // Para volver al menú correcto
-	mainMenuItems  []menuItem // Guardar items del menú principal
+	previousScreen  screen
+	mainMenuItems   []menuItem
 }
 
-// Items del submenú de logs
+// Items del submenú de logs (simplified)
 func getLogsMenuItems() []menuItem {
 	return []menuItem{
 		{
-			title:       "Ver Logs en Vivo",
-			description: "Muestra últimos 100 logs, actualiza cada 1s",
-			icon:        "[>]",
-			action:      nil,
-			enabled:     func(s string) bool { return true },
-		},
-		{
 			title:       "Abrir Archivo de Logs",
-			description: "Abre el archivo . log en el editor",
+			description: "Abre el archivo .log en el editor",
 			icon:        "[#]",
 			action:      nil,
 			enabled:     func(s string) bool { return true },
@@ -297,20 +253,6 @@ func getLogsMenuItems() []menuItem {
 			title:       "Abrir Ubicación",
 			description: "Abre la carpeta que contiene los logs",
 			icon:        "[D]",
-			action:      nil,
-			enabled:     func(s string) bool { return true },
-		},
-		{
-			title:       "Limpiar Logs (Flush)",
-			description: "Reduce el archivo manteniendo últimas 50 líneas",
-			icon:        "[~]",
-			action:      nil,
-			enabled:     func(s string) bool { return true },
-		},
-		{
-			title:       "Toggle Logs Detallados",
-			description: "Habilita/deshabilita logs no críticos",
-			icon:        "[*]",
 			action:      nil,
 			enabled:     func(s string) bool { return true },
 		},
@@ -325,26 +267,22 @@ func getLogsMenuItems() []menuItem {
 }
 
 func initialModel() model {
-	// Configurar spinner con animación más llamativa
 	s := spinner.New()
 	s.Spinner = spinner.Pulse
 	s.Style = lipgloss.NewStyle().Foreground(primaryColor)
 
-	// Configurar barra de progreso con gradiente personalizado
 	p := progress.New(
 		progress.WithScaledGradient("#CC0033", "#33A0FF"),
 		progress.WithWidth(40),
 		progress.WithoutPercentage(),
 	)
 
-	// Configurar ayuda
 	h := help.New()
 	h.Styles.ShortKey = lipgloss.NewStyle().Foreground(secondaryColor)
 	h.Styles.ShortDesc = lipgloss.NewStyle().Foreground(lightColor)
 	h.Styles.FullKey = lipgloss.NewStyle().Foreground(primaryColor)
 	h.Styles.FullDesc = lipgloss.NewStyle().Foreground(lightColor)
 
-	// Crear items del menú con iconos ASCII
 	items := []menuItem{
 		{
 			title:       "Instalar Servicio",
@@ -400,7 +338,7 @@ func initialModel() model {
 		},
 		{
 			title:       "Gestionar Logs",
-			description: "Submenú de opciones de logs",
+			description: "Abrir archivo o carpeta de logs",
 			icon:        "[#]",
 			action:      nil,
 			enabled:     func(state string) bool { return true },
@@ -414,13 +352,11 @@ func initialModel() model {
 		},
 	}
 
-	// Convertir a list.Item
 	listItems := make([]list.Item, len(items))
 	for i, item := range items {
 		listItems[i] = item
 	}
 
-	// Crear delegado personalizado para la lista
 	delegate := list.NewDefaultDelegate()
 	delegate.Styles.SelectedTitle = selectedStyle
 	delegate.Styles.SelectedDesc = selectedStyle.Faint(true)
@@ -429,7 +365,6 @@ func initialModel() model {
 	delegate.Styles.DimmedTitle = disabledStyle
 	delegate.Styles.DimmedDesc = disabledStyle.Faint(true)
 
-	// Crear lista con tamaño inicial por defecto
 	l := list.New(listItems, delegate, 80, 20)
 	l.Title = "Menu Principal"
 	l.Styles.Title = titleStyle
@@ -437,28 +372,19 @@ func initialModel() model {
 	l.SetFilteringEnabled(false)
 	l.SetShowHelp(false)
 
-	// Inicializar viewport para logs
-	vp := viewport.New(80, 20)
-	vp.Style = lipgloss.NewStyle().Foreground(lightColor)
-
 	return model{
 		screen:        menuScreen,
 		list:          l,
 		menuItems:     items,
-		mainMenuItems: items, // Guardar referencia
+		mainMenuItems: items,
 		spinner:       s,
 		progress:      p,
 		help:          h,
 		keys:          keys,
 		serviceState:  checkServiceStatus(),
 		ready:         false,
-		viewport:      vp,
-		logLines:      []string{},
-		logVerbose:    BuildEnvironment == "test", // Default según ambiente
 	}
 }
-
-// Comandos
 
 func (m model) Init() tea.Cmd {
 	return tea.Batch(
@@ -468,132 +394,24 @@ func (m model) Init() tea.Cmd {
 	)
 }
 
-// Comando para actualizar el estado del servicio
 func checkServiceStatusCmd() tea.Cmd {
 	return tea.Every(2*time.Second, func(t time.Time) tea.Msg {
 		return serviceCheckMsg(checkServiceStatus())
 	})
 }
 
-// Comando para animar elementos
 func animationCmd() tea.Cmd {
 	return tea.Every(100*time.Millisecond, func(t time.Time) tea.Msg {
 		return animationMsg{}
 	})
 }
 
-// Comando de progreso simulado
 func simulateProgress() tea.Cmd {
 	return tea.Every(100*time.Millisecond, func(t time.Time) tea.Msg {
 		return progressMsg(0.1)
 	})
 }
 
-// Comando para polling de logs - lee directamente del archivo
-func tailLogsCmd() tea.Cmd {
-	return tea.Tick(1*time.Second, func(t time.Time) tea.Msg {
-		lines := readLogsFromFile(100)
-		return logLinesMsg(lines)
-	})
-}
-
-// Conectar al servicio via WebSocket
-func connectToService() (*websocket.Conn, error) {
-	addr := "ws://localhost:8765"
-	if BuildEnvironment == "prod" {
-		addr = "ws://127.0.0.1:8765"
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	conn, _, err := websocket.Dial(ctx, addr, nil)
-	return conn, err
-}
-
-// Enviar comando de logs al servicio
-func (m model) sendLogCommand(tipo string, args ...interface{}) (model, tea.Cmd) {
-	conn := m.wsConn
-	closeAfter := false
-
-	if conn == nil {
-		var err error
-		conn, err = connectToService()
-		if err != nil {
-			m.screen = resultScreen
-			m.success = false
-			m.result = "[X] Servicio no disponible"
-			return m, nil
-		}
-		closeAfter = true
-
-		// Consumir mensaje inicial de ambiente para conexiones nuevas
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		_, _ = readLogResponse(ctx, conn)
-		cancel()
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	msg := map[string]interface{}{"tipo": tipo}
-	if len(args) > 0 {
-		if v, ok := args[0].(bool); ok {
-			msg["verbose"] = v
-			m.logVerbose = v
-		}
-	}
-
-	_ = wsjson.Write(ctx, conn, msg)
-
-	if closeAfter {
-		conn.Close(websocket.StatusNormalClosure, "")
-	}
-
-	m.statusMessage = "[OK] Comando enviado"
-	return m, nil
-}
-
-// Comando para flush de logs
-func flushLogsCmd() tea.Cmd {
-	return func() tea.Msg {
-		conn, err := connectToService()
-		if err != nil {
-			return operationDoneMsg{false, "[X] No se pudo conectar al servicio"}
-		}
-		defer conn.Close(websocket.StatusNormalClosure, "")
-
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-
-		// Consumir mensaje inicial de ambiente
-		_, _ = readLogResponse(ctx, conn)
-
-		// Enviar comando flush
-		err = wsjson.Write(ctx, conn, map[string]string{"tipo": "logFlush"})
-		if err != nil {
-			return operationDoneMsg{false, "[X] Error enviando comando"}
-		}
-
-		// Esperar respuesta (descartando pesos)
-		response, err := readLogResponse(ctx, conn)
-		if err != nil {
-			return operationDoneMsg{false, "[X] Error leyendo respuesta"}
-		}
-
-		if ok, exists := response["ok"].(bool); exists && ok {
-			return operationDoneMsg{true, "[OK] Logs limpiados correctamente"}
-		}
-
-		if errMsg, exists := response["error"].(string); exists {
-			return operationDoneMsg{false, fmt.Sprintf("[X] Error: %s", errMsg)}
-		}
-
-		return operationDoneMsg{true, "[OK] Logs limpiados"}
-	}
-}
-
-// Tipos de mensajes
 type serviceCheckMsg string
 type progressMsg float64
 type animationMsg struct{}
@@ -602,7 +420,6 @@ type operationDoneMsg struct {
 	message string
 }
 
-// Update principal
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
@@ -612,7 +429,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.ready = true
 
-		// Calcular altura disponible para la lista
 		headerHeight := 13
 		footerHeight := 3
 		if m.showHelp {
@@ -624,20 +440,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			listHeight = 8
 		}
 
-		// Ajustar tamaños de componentes
 		m.list.SetSize(m.width-4, listHeight)
 		m.progress.Width = m.width - 10
 		if m.progress.Width < 20 {
 			m.progress.Width = 20
 		}
 		m.help.Width = m.width
-
-		// Actualizar viewport para logs
-		m.viewport.Width = m.width - 4
-		m.viewport.Height = m.height - 8
-		if m.viewport.Height < 10 {
-			m.viewport.Height = 10
-		}
 
 		return m, nil
 
@@ -671,29 +479,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.progressPercent = 0
 		return m, checkServiceStatusCmd()
 
-	// Manejar mensajes de logs
-	case logLinesMsg:
-		if msg == nil || len(msg) == 0 {
-			// Continuar polling
-			if m.screen == logsViewScreen {
-				return m, tailLogsCmd()
-			}
-			return m, nil
-		}
-		m.logLines = []string(msg)
-		m.logSize = getLogFileInfo()
-		m.viewport.SetContent(strings.Join(m.logLines, "\n"))
-		m.viewport.GotoBottom()
-		if m.screen == logsViewScreen {
-			return m, tailLogsCmd()
-		}
-		return m, nil
-
-	case logStatusMsg:
-		m.logVerbose = msg.Verbose
-		m.logSize = msg.Size
-		return m, nil
-
 	case tea.KeyMsg:
 		switch m.screen {
 		case menuScreen:
@@ -726,9 +511,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						simulateProgress(),
 					)
 				}
-			case key.Matches(msg, m.keys.ToggleLog):
-				// Ir al submenú de logs
-				return m.goToLogsMenu()
 			case key.Matches(msg, m.keys.Enter):
 				return m.handleMenuSelection()
 			}
@@ -737,7 +519,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.list = newListModel
 			cmds = append(cmds, cmd)
 
-		// Manejar submenú de logs
 		case logsMenuScreen:
 			switch {
 			case key.Matches(msg, m.keys.Quit), msg.String() == "esc":
@@ -748,28 +529,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			newListModel, cmd := m.list.Update(msg)
 			m.list = newListModel
-			cmds = append(cmds, cmd)
-
-		// Manejar visor de logs
-		case logsViewScreen:
-			switch msg.String() {
-			case "esc", "q":
-				// Simplemente volver al menú de logs
-				m.logsConnected = false
-				return m.goToLogsMenu()
-			case "r": // Refresh manual
-				lines := readLogsFromFile(100)
-				m.logLines = lines
-				m.logSize = getLogFileInfo()
-				m.viewport.SetContent(strings.Join(lines, "\n"))
-				m.viewport.GotoBottom()
-				m.statusMessage = "[OK] Logs actualizados"
-				return m, tailLogsCmd()
-			}
-
-			// Scroll del viewport
-			newVP, cmd := m.viewport.Update(msg)
-			m.viewport = newVP
 			cmds = append(cmds, cmd)
 
 		case confirmScreen:
@@ -789,7 +548,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case resultScreen:
 			if msg.String() == "enter" || msg.String() == "esc" {
-				// Volver al menú apropiado
 				if m.previousScreen == logsMenuScreen {
 					return m.goToLogsMenu()
 				}
@@ -815,7 +573,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// Ir al submenú de logs
 func (m model) goToLogsMenu() (model, tea.Cmd) {
 	logsItems := getLogsMenuItems()
 	listItems := make([]list.Item, len(logsItems))
@@ -829,20 +586,9 @@ func (m model) goToLogsMenu() (model, tea.Cmd) {
 	m.screen = logsMenuScreen
 	m.previousScreen = logsMenuScreen
 
-	// Intentar obtener estado de logs
-	go func() {
-		if conn, err := connectToService(); err == nil {
-			defer conn.Close(websocket.StatusNormalClosure, "")
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
-			_ = wsjson.Write(ctx, conn, map[string]string{"tipo": "logStatus"})
-		}
-	}()
-
 	return m, nil
 }
 
-// Volver al menú principal
 func (m model) goToMainMenu() (model, tea.Cmd) {
 	listItems := make([]list.Item, len(m.mainMenuItems))
 	for i, item := range m.mainMenuItems {
@@ -858,22 +604,10 @@ func (m model) goToMainMenu() (model, tea.Cmd) {
 	return m, checkServiceStatusCmd()
 }
 
-// Manejar selección del submenú de logs
 func (m model) handleLogsMenuSelection() (model, tea.Cmd) {
 	selected := m.list.SelectedItem().(menuItem)
 
 	switch selected.title {
-	case "Ver Logs en Vivo":
-		// Leer logs iniciales del archivo
-		lines := readLogsFromFile(100)
-		m.logLines = lines
-		m.viewport.SetContent(strings.Join(lines, "\n"))
-		m.viewport.GotoBottom()
-		m.logSize = getLogFileInfo()
-		m.screen = logsViewScreen
-		m.statusMessage = ""
-		return m, tailLogsCmd()
-
 	case "Abrir Archivo de Logs":
 		viewLogs()
 		m.statusMessage = "Abriendo archivo de logs..."
@@ -885,18 +619,6 @@ func (m model) handleLogsMenuSelection() (model, tea.Cmd) {
 		m.statusMessage = "Abriendo carpeta de logs..."
 		return m, nil
 
-	case "Limpiar Logs (Flush)":
-		m.confirmAction = "¿Limpiar archivo de logs?\n(se mantienen últimas 50 líneas)"
-		m.confirmCallback = flushLogsCmd()
-		m.previousScreen = logsMenuScreen
-		m.screen = confirmScreen
-		return m, nil
-
-	case "Toggle Logs Detallados":
-		newModel, cmd := m.sendLogCommand("logConfig", !m.logVerbose)
-		newModel.statusMessage = fmt.Sprintf("[OK] Verbose cambiado a: %v", newModel.logVerbose)
-		return newModel, cmd
-
 	case "Volver":
 		return m.goToMainMenu()
 	}
@@ -904,7 +626,6 @@ func (m model) handleLogsMenuSelection() (model, tea.Cmd) {
 	return m, nil
 }
 
-// Manejo de selección del menú
 func (m model) handleMenuSelection() (model, tea.Cmd) {
 	selected := m.list.SelectedItem().(menuItem)
 
@@ -941,8 +662,6 @@ func (m model) handleMenuSelection() (model, tea.Cmd) {
 	}
 }
 
-// Vistas
-
 func (m model) View() string {
 	if !m.ready {
 		return "Inicializando..."
@@ -959,22 +678,19 @@ func (m model) View() string {
 		return m.viewConfirm()
 	case logsMenuScreen:
 		return m.viewLogsMenu()
-	case logsViewScreen:
-		return m.viewLogsLive()
 	default:
 		return ""
 	}
 }
 
-// Update the viewMenu to show environment info
 func (m model) viewMenu() string {
 	var b strings.Builder
 
 	b.WriteString(bannerStyle.Render(banner) + "\n")
 
-	envIndicator := "[TEST]"
-	if BuildEnvironment == "prod" {
-		envIndicator = "[PROD]"
+	envIndicator := "[REMOTE]"
+	if BuildEnvironment == "local" {
+		envIndicator = "[LOCAL]"
 	}
 
 	status := getStatusDisplay(m.serviceState)
@@ -1001,21 +717,12 @@ func (m model) viewMenu() string {
 	return b.String()
 }
 
-// Vista del submenú de logs
 func (m model) viewLogsMenu() string {
 	var b strings.Builder
 
 	b.WriteString(bannerStyle.Render(banner) + "\n")
 
-	// Status bar con info de logs
-	verboseStatus := "OFF"
-	if m.logVerbose {
-		verboseStatus = "ON"
-	}
-
-	statusBar := statusBarStyle.Render(
-		fmt.Sprintf("[#] LOGS | Verbose: %s | Tamaño: %s",
-			verboseStatus, formatBytes(m.logSize)))
+	statusBar := statusBarStyle.Render("[#] GESTIÓN DE LOGS")
 	b.WriteString(statusBar + "\n\n")
 
 	b.WriteString(m.list.View())
@@ -1027,54 +734,6 @@ func (m model) viewLogsMenu() string {
 	}
 
 	return b.String()
-}
-
-// Vista del visor de logs en vivo
-func (m model) viewLogsLive() string {
-	var b strings.Builder
-
-	// Header compacto
-	header := lipgloss.NewStyle().
-		Background(darkColor).
-		Foreground(primaryColor).
-		Bold(true).
-		Padding(0, 1).
-		Width(m.width).
-		Render(fmt.Sprintf("[#] LOGS EN VIVO | Tamaño: %s | Líneas: %d",
-			formatBytes(m.logSize), len(m.logLines)))
-
-	b.WriteString(header + "\n")
-
-	// Viewport con logs
-	viewportStyle := logViewerStyle.Width(m.width - 2).Height(m.viewport.Height)
-	b.WriteString(viewportStyle.Render(m.viewport.View()) + "\n")
-
-	// Footer con controles simplificados
-	footer := infoStyle.Render("[ESC/Q] Volver") + " • " +
-		warningStyle.Render("[R] Refresh") + " • " +
-		normalStyle.Render("[↑↓] Scroll") + " • " +
-		successStyle.Render("Auto-refresh:  1s")
-	b.WriteString(footer)
-
-	if m.statusMessage != "" {
-		b.WriteString("\n" + infoStyle.Render(m.statusMessage))
-	}
-
-	return b.String()
-}
-
-// Formatear bytes a unidades legibles
-func formatBytes(b int64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := int64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
 func (m model) viewProcessing() string {
@@ -1149,7 +808,7 @@ func (m model) viewResult() string {
 	return b.String()
 }
 
-// Comandos de servicio
+// Service commands
 func restartServiceCmd() tea.Cmd {
 	svcName := getServiceName()
 	return func() tea.Msg {
@@ -1181,7 +840,6 @@ func getStatusDisplay(state string) string {
 	return "[?] DESCONOCIDO"
 }
 
-// Update service commands to use dynamic service name
 func installServiceCmd() tea.Cmd {
 	return func() tea.Msg {
 		if !isAdmin() {
@@ -1202,7 +860,6 @@ func installServiceCmd() tea.Cmd {
 			}
 		}
 
-		// Use the appropriate embedded service based on environment
 		if err := os.WriteFile(targetPath, getEmbeddedService(), 0755); err != nil {
 			return operationDoneMsg{
 				success: false,
@@ -1229,9 +886,9 @@ func installServiceCmd() tea.Cmd {
 			"actions=restart/5000/restart/5000/restart/5000").Run()
 		_ = exec.Command("sc", "start", svcName).Run()
 
-		envMsg := "PRODUCCION (0.0.0.0:8765)"
-		if BuildEnvironment == "test" {
-			envMsg = "TEST (localhost:8765)"
+		envMsg := "REMOTE (0.0.0.0:8765)"
+		if BuildEnvironment == "local" {
+			envMsg = "LOCAL (localhost:8765)"
 		}
 
 		return operationDoneMsg{
@@ -1373,109 +1030,4 @@ func main() {
 		fmt.Printf("Error: %v", err)
 		os.Exit(1)
 	}
-}
-
-// readLogResponse lee mensajes del WebSocket hasta encontrar una respuesta de logs válida.
-// Descarta mensajes de peso (strings simples) que llegan del broadcaster.
-func readLogResponse(ctx context.Context, conn *websocket.Conn) (map[string]interface{}, error) {
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-
-		_, data, err := conn.Read(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		// Intentar parsear como JSON
-		var response map[string]interface{}
-		if err := json.Unmarshal(data, &response); err != nil {
-			// No es JSON válido (probablemente un peso como "0.000 kg")
-			// Continuar leyendo hasta obtener respuesta de logs
-			continue
-		}
-
-		// Verificar que es una respuesta de logs (no mensaje de ambiente inicial)
-		if tipo, ok := response["tipo"].(string); ok {
-			switch tipo {
-			case "logLines", "logStatus", "logFlushResult":
-				return response, nil
-			case "ambiente":
-				// Descartar mensaje inicial de ambiente, seguir leyendo
-				continue
-			}
-		}
-
-		// Respuesta JSON pero no es de logs, continuar
-		continue
-	}
-}
-
-// readLogsFromFile lee las últimas N líneas del archivo de logs directamente
-func readLogsFromFile(n int) []string {
-	logPath := filepath.Join(os.Getenv("PROGRAMDATA"), getServiceName(), getServiceName()+".log")
-
-	file, err := os.Open(logPath)
-	if err != nil {
-		return []string{fmt.Sprintf("[!] No se pudo abrir archivo: %v", err)}
-	}
-	defer file.Close()
-
-	stat, err := file.Stat()
-	if err != nil {
-		return []string{fmt.Sprintf("[!] Error al obtener info del archivo: %v", err)}
-	}
-
-	size := stat.Size()
-	if size == 0 {
-		return []string{"[i] Archivo de logs vacío"}
-	}
-
-	// Leer últimos 64KB máximo (suficiente para ~1000 líneas)
-	bufSize := int64(64 * 1024)
-	if size < bufSize {
-		bufSize = size
-	}
-
-	buf := make([]byte, bufSize)
-	_, err = file.Seek(size-bufSize, 0)
-	if err != nil {
-		return []string{fmt.Sprintf("[!] Error seek: %v", err)}
-	}
-
-	_, err = file.Read(buf)
-	if err != nil {
-		return []string{fmt.Sprintf("[!] Error leyendo:  %v", err)}
-	}
-
-	// Partir en líneas
-	allLines := strings.Split(string(buf), "\n")
-
-	// Limpiar líneas vacías al final
-	for len(allLines) > 0 && allLines[len(allLines)-1] == "" {
-		allLines = allLines[:len(allLines)-1]
-	}
-
-	// Si empezamos a leer a mitad de una línea, descartarla
-	if size > bufSize && len(allLines) > 0 {
-		allLines = allLines[1:]
-	}
-
-	if len(allLines) <= n {
-		return allLines
-	}
-	return allLines[len(allLines)-n:]
-}
-
-// getLogFileInfo obtiene tamaño del archivo de logs
-func getLogFileInfo() int64 {
-	logPath := filepath.Join(os.Getenv("PROGRAMDATA"), getServiceName(), getServiceName()+".log")
-	info, err := os.Stat(logPath)
-	if err != nil {
-		return 0
-	}
-	return info.Size()
 }
