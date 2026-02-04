@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚖️ Scale Daemon | Centro de Control</title>
+    <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+
+<header>
+    <div class="brand">
+        <div class="brand-icon">⚖️</div>
+        <div class="brand-text">Scale <span>Daemon</span></div>
+    </div>
+
+    <div class="header-center">
+        <div class="header-stat">
+            <span class="header-stat-label">Uptime:</span>
+            <span class="header-stat-value" id="uptimeVal">--</span>
+        </div>
+        <div class="header-stat">
+            <span class="header-stat-label">Lecturas:</span>
+            <span class="header-stat-value success" id="weightsReceivedVal">0</span>
+        </div>
+        <div class="header-stat">
+            <span class="header-stat-label">Última:</span>
+            <span class="header-stat-value info" id="lastWeightVal">--</span>
+        </div>
+    </div>
+
+    <div id="connStatus" class="conn-badge offline">
+        <span class="conn-dot"></span>
+        <span>Conectando...</span>
+    </div>
+</header>
+
+<div class="dashboard">
+
+    <!-- Left Panel: Weight Display & Config -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">
+                <span class="panel-title-icon">⚖️</span>
+                Lectura en Tiempo Real
+            </div>
+            <button class="btn btn-icon btn-sm" id="btnRefresh" title="Actualizar Estado">🔄</button>
+        </div>
+        <div class="panel-content">
+
+            <!-- Weight Hero Display -->
+            <div class="weight-container" id="weightContainer">
+                <div class="weight-display" id="weightDisplay">0.00</div>
+                <div class="weight-unit" id="weightUnit">kg</div>
+                <div class="weight-status" id="weightStatus">
+                    <span class="weight-status-dot"></span>
+                    <span id="weightStatusText">Esperando lecturas...</span>
+                </div>
+            </div>
+
+            <!-- Metrics Grid -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-label">Entorno</span>
+                        <span class="metric-icon">🌐</span>
+                    </div>
+                    <div class="metric-value info" id="ambienteVal">--</div>
+                    <div class="metric-sub" id="buildInfo">Build: --</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-label">Puerto Serial</span>
+                        <span class="metric-icon">🔌</span>
+                    </div>
+                    <div class="metric-value" id="puertoVal">--</div>
+                    <div class="metric-sub" id="marcaVal">--</div>
+                </div>
+            </div>
+
+            <div class="section-label">⚙️ Configuración</div>
+
+            <label for="puertoInput">Puerto COM</label>
+            <input type="text" id="puertoInput" value="COM3" placeholder="COM3">
+
+            <label for="marcaSelect">Marca de Báscula</label>
+            <select id="marcaSelect">
+                <option value="Rhino BAR 8RS">Rhino BAR 8RS</option>
+                <option value="rhino">Rhino (Generic)</option>
+            </select>
+
+            <label class="checkbox-label">
+                <input type="checkbox" id="modoPruebaCheck">
+                <span>🧪 Modo Prueba (Pesos Simulados)</span>
+            </label>
+
+            <button class="btn btn-primary" id="btnApplyConfig" disabled>
+                ✅ Aplicar Configuración
+            </button>
+
+            <div class="section-label">🎯 Diagnóstico</div>
+            <div class="btn-group-2">
+                <button class="btn" id="btnPing">🏓 HTTP Ping</button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Right Panel: Transaction Log -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">
+                <span class="panel-title-icon">📋</span>
+                Log de Transacciones
+            </div>
+            <span id="logCount" style="font-size: 0.75rem; color: var(--text-muted);">0 entradas</span>
+        </div>
+        <div class="log-container" id="logContainer"></div>
+        <div class="log-footer">
+            <button class="btn btn-sm" id="btnClearLogs">🗑️ Limpiar</button>
+            <button class="btn btn-sm" id="btnExportLogs">📥 Exportar</button>
+        </div>
+    </div>
+
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="js/config.js"></script>
+<script src="js/state.js"></script>
+<script src="js/websocket.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
