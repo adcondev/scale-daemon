@@ -4,7 +4,7 @@
 
 version: '3'
 
-silent: false
+silent: true
 
 vars:
   # ===========================================================================
@@ -89,13 +89,14 @@ tasks:
       BUILD_TIME: { sh: powershell -Command "Get-Date -Format 'HH:mm:ss'" }
     cmds:
       # INJECTION: We pass the Names directly to the Go code here
-      - go build -ldflags "-X main.BuildEnvironment=local -X main.ServiceName={{.CMD_ID_LOCAL}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.BIN_DIR}}/{{.CMD_EXE_NAME_LOCAL}} ./cmd/BasculaServicio
+      - go build -ldflags "-X main.BuildEnvironment=local -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.BIN_DIR}}/{{.CMD_EXE_NAME_LOCAL}} ./cmd/BasculaServicio
       - echo "✅ Console (LOCAL) compiled to:{{.BIN_DIR}}/{{.CMD_EXE_NAME_LOCAL}}"
-      - go build -ldflags "-X main.BuildEnvironment=remote -X main.ServiceName={{.CMD_ID_REMOTE}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.BIN_DIR}}/{{.CMD_EXE_NAME_REMOTE}} ./cmd/BasculaServicio
+      - go build -ldflags "-X main.BuildEnvironment=remote -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.BIN_DIR}}/{{.CMD_EXE_NAME_REMOTE}} ./cmd/BasculaServicio
       - echo "✅ Console (REMOTE) compiled to:{{.BIN_DIR}}/{{.CMD_EXE_NAME_REMOTE}}"
 
   service:build:local:
-    desc: "🔨 Compile Service with LOCAL configuration"
+    desc: "🔨 [INTERNAL] Compile Service with LOCAL configuration"
+    internal: true  # Hides from task --list
     deps: [ ws:prepare ]
     vars:
       BUILD_DATE: { sh: powershell -Command "Get-Date -Format 'yyyy-MM-dd'" }
@@ -109,7 +110,8 @@ tasks:
       - echo "✅ Service (LOCAL) copied to embed path:{{.TMP_DIR}}/{{.SVC_EXE_NAME_LOCAL}}"
 
   service:build:remote:
-    desc: "🔨 Compile Service with REMOTE configuration"
+    desc: "🔨 [INTERNAL] Compile Service with REMOTE configuration"
+    internal: true
     deps: [ ws:prepare ]
     vars:
       BUILD_DATE: { sh: powershell -Command "Get-Date -Format 'yyyy-MM-dd'" }

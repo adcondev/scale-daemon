@@ -102,7 +102,10 @@ func (r *Reader) closePort() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.port != nil {
-		r.port.Close()
+		err := r.port.Close()
+		if err != nil {
+			return
+		}
 		r.port = nil
 	}
 }
@@ -158,7 +161,10 @@ func (r *Reader) readCycle(ctx context.Context) {
 		_, err := r.port.Write([]byte(cmd))
 		if err != nil {
 			log.Printf("[!] Error al escribir en el puerto: %v. Cerrando y reintentando...", err)
-			r.port.Close()
+			err := r.port.Close()
+			if err != nil {
+				return
+			}
 			r.port = nil
 			r.mu.Unlock()
 			time.Sleep(RetryDelay)
@@ -196,7 +202,7 @@ func (r *Reader) readCycle(ctx context.Context) {
 				// Channel full, skip
 			}
 		} else {
-			log.Println("[!] No se recibio peso significativo.")
+			log.Println("[!] No se recibió peso significativo.")
 		}
 
 		time.Sleep(300 * time.Millisecond)
@@ -218,7 +224,10 @@ func (r *Reader) connect(puerto string) error {
 	}
 
 	if err := port.SetReadTimeout(SerialReadTimeout); err != nil {
-		port.Close()
+		err := port.Close()
+		if err != nil {
+			return err
+		}
 		return err
 	}
 

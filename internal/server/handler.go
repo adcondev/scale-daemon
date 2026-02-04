@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"embed"
 	"encoding/json"
 	"errors"
 	"io"
@@ -29,7 +28,6 @@ type Server struct {
 	logMgr         *logging.Manager
 	buildInfo      string
 	onConfigChange func()
-	assets         embed.FS
 	buildDate      string
 	buildTime      string
 	startTime      time.Time
@@ -68,6 +66,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// clients connecting to /ws likely intend to upgrade.
 
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		// FIXME: InsecureSkipVerify should be false in production with proper certs
 		InsecureSkipVerify: true,
 		OriginPatterns:     []string{"*"},
 	})
@@ -76,7 +75,12 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[X] Error accepting websocket: %v", err)
 		return
 	}
-	defer c.Close(websocket.StatusInternalError, "closing")
+	defer func(c *websocket.Conn, code websocket.StatusCode, reason string) {
+		err := c.Close(code, reason)
+		if err != nil {
+			log.Printf("[!] Error closing websocket: %v", err)
+		}
+	}(c, websocket.StatusInternalError, "closing")
 
 	ctx := r.Context()
 
@@ -186,7 +190,11 @@ func (s *Server) handleConfigMessage(mensaje map[string]interface{}) {
 	// Parse into struct for type safety
 	data, _ := json.Marshal(mensaje)
 	var configMsg ConfigMessage
-	_ = json.Unmarshal(data, &configMsg)
+	err := json.Unmarshal(data, &configMsg)
+	if err != nil {
+		log.Printf("[X] Error parsing config message: %v", err)
+		return
+	}
 
 	log.Printf("[i] Configuración recibida: Puerto=%s Marca=%s ModoPrueba=%v",
 		configMsg.Puerto, configMsg.Marca, configMsg.ModoPrueba)
@@ -207,7 +215,10 @@ func (s *Server) HandlePing(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("pong"))
+	_, err := w.Write([]byte("pong"))
+	if err != nil {
+		return
+	}
 }
 
 // HandleHealth returns service health metrics
@@ -244,13 +255,25 @@ func (s *Server) HandleHealth(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	json.NewEncoder(w).Encode(response)
+	err := json.NewEncoder(w).Encode(response)
+	if err != nil {
+		return
+	}
 }
 
 func (s *Server) sendJSON(ctx context.Context, c *websocket.Conn, v interface{}) {
+	// Record activity whenever we successfully send data (e.g. weight updates)
+	s.recordWeightActivity()
+
 	ctx2, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	_ = wsjson.Write(ctx2, c, v)
+}
+
+func (s *Server) recordWeightActivity() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastWeightTime = time.Now()
 }
 
 // ListenAndServe inicia el servidor HTTP

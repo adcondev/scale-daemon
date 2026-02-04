@@ -2,9 +2,7 @@ package main
 
 import (
 	"log"
-	"math/rand"
 	"syscall"
-	"time"
 
 	"github.com/judwhite/go-svc"
 
@@ -13,15 +11,12 @@ import (
 
 // Build variables (injected via ldflags)
 var (
-	BuildEnvironment = "test"
+	BuildEnvironment = "local"
 	BuildDate        = "unknown"
 	BuildTime        = "unknown"
 )
 
 func main() {
-	// Seed random for test mode weight simulation
-	rand.Seed(time.Now().UnixNano())
-
 	// Create and run service
 	service := daemon.New(BuildEnvironment, BuildDate, BuildTime)
 

@@ -22,10 +22,9 @@ import (
 // Variables injected by Taskfile (ldflags)
 var (
 	BuildEnvironment = "remote"
-	BuildDate        = "unknown"
-	BuildTime        = "unknown"
+	BuildDate        = "2026-01-30"
+	BuildTime        = "15:54:47"
 
-	// INJECTED NAMES
 	ServiceName        = "BasculaServicio"     // Registry Name
 	ServiceDisplayName = "Servicio de Bascula" // Services.msc Name
 	ServiceExeName     = "BasculaServicio.exe" // Filename on Disk
@@ -55,10 +54,10 @@ func getBanner() string {
 	if BuildEnvironment == "local" {
 		envLabel = "LOCAL"
 	}
-
 	return fmt.Sprintf(`
 ╔═════════════════════════════════════════════╗
-║             SCALE DAEMON v1.3.0             ║
+║             SCALE DAEMON v1.2.0             ║
+║       Build: %s %s              ║
 ║                                             ║
 ║     ____     /                _             ║
 ║    | __ )  __ _ ___  ___ _  _| | __ _       ║
@@ -69,7 +68,7 @@ func getBanner() string {
 ║           Instalador de Servicio            ║
 ║           (C) 2025 Red2000 - %s         ║
 ╚═════════════════════════════════════════════╝`,
-		envLabel,
+		envLabel, BuildDate, BuildTime,
 	)
 }
 
@@ -988,8 +987,15 @@ func checkServiceStatus() string {
 }
 
 func isAdmin() bool {
-	_, err := os.Open("\\\\.\\PHYSICALDRIVE0")
-	return err == nil
+	f, err := os.Open("\\\\.\\PHYSICALDRIVE0")
+	if err != nil {
+		return false
+	}
+	err = f.Close()
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 func viewLogs() {

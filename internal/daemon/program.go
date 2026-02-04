@@ -133,7 +133,6 @@ func (s *Service) Stop() error {
 	log.Println("[.] Servicio deteniéndose...")
 
 	// Signal stop
-	close(s.quit)
 	s.cancel()
 
 	// Stop reader
@@ -144,7 +143,10 @@ func (s *Service) Stop() error {
 
 	// Close log file
 	if s.logMgr != nil {
-		s.logMgr.Close()
+		err := s.logMgr.Close()
+		if err != nil {
+			return err
+		}
 	}
 
 	log.Println("[.] Servicio detenido")

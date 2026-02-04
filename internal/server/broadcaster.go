@@ -59,10 +59,26 @@ func (b *Broadcaster) broadcastWeight(peso string) {
 			// This preserves the exact format expected by clients
 			if err := wsjson.Write(ctx, c, peso); err != nil {
 				log.Printf("[!] Error al enviar a cliente: %v", err)
-				b.RemoveClient(c)
-				c.Close(websocket.StatusInternalError, "Error de envío")
+				b.removeAndCloseClient(c)
 			}
 		}(conn)
+	}
+}
+
+// removeAndCloseClient safely removes and closes a client connection
+func (b *Broadcaster) removeAndCloseClient(conn *websocket.Conn) {
+	b.mu.Lock()
+	_, exists := b.clients[conn]
+	if exists {
+		delete(b.clients, conn)
+	}
+	b.mu.Unlock()
+
+	if exists {
+		err := conn.Close(websocket.StatusInternalError, "Error de envío")
+		if err != nil {
+			return
+		}
 	}
 }
 

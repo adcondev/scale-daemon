@@ -79,6 +79,7 @@ func Setup(serviceName string, defaultVerbose bool) (*Manager, error) {
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		// Permission denied - fallback to stdout (console mode)
 		log.SetOutput(os.Stdout)
+		mgr.FilePath = ""
 		log.Printf("[i] Logging to stdout (no write access to %s)", logDir)
 		return mgr, nil
 	}
@@ -135,7 +136,10 @@ func (m *Manager) Flush() error {
 
 	// Close current file
 	if m.file != nil {
-		m.file.Close()
+		err := m.file.Close()
+		if err != nil {
+			return err
+		}
 	}
 
 	// Flush to last 50 lines
@@ -146,6 +150,8 @@ func (m *Manager) Flush() error {
 	// Reopen file
 	f, err := os.OpenFile(m.FilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
+		log.SetOutput(os.Stdout)
+		log.Printf("[i] Logging to stdout (cannot open %s: %v)", m.FilePath, err)
 		return err
 	}
 
@@ -158,15 +164,22 @@ func (m *Manager) Flush() error {
 
 // GetStatus returns current log status
 func (m *Manager) GetStatus() map[string]interface{} {
+	size := GetFileSize(m.FilePath)
+	if m.FilePath == "" {
+		size = 0
+	}
 	return map[string]interface{}{
 		"tipo":    "logStatus",
 		"verbose": m.GetVerbose(),
-		"size":    GetFileSize(m.FilePath),
+		"size":    size,
 	}
 }
 
 // GetTail returns the last n lines of the log
 func (m *Manager) GetTail(n int) []string {
+	if m.FilePath == "" {
+		return []string{}
+	}
 	return ReadLastNLines(m.FilePath, n)
 }
 

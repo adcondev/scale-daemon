@@ -19,16 +19,16 @@ type Environment struct {
 
 // Environments defines available deployment configurations
 var Environments = map[string]Environment{
-	"prod": {
-		Name:        "PRODUCCIÓN",
-		ServiceName: "BasculaServicio",
+	"remote": {
+		Name:        "REMOTO",
+		ServiceName: "BasculaServicio_Remoto",
 		ListenAddr:  "0.0.0.0:8765",
 		DefaultPort: "COM3",
 		DefaultMode: true,
 	},
-	"test": {
-		Name:        "TEST/DEV",
-		ServiceName: "BasculaServicioTest",
+	"local": {
+		Name:        "LOCAL",
+		ServiceName: "BasculaServicio_Local",
 		ListenAddr:  "localhost:8765",
 		DefaultPort: "COM3",
 		DefaultMode: true,
@@ -41,7 +41,7 @@ func GetEnvironment(env string) Environment {
 	if cfg, ok := Environments[env]; ok {
 		return cfg
 	}
-	return Environments["prod"]
+	return Environments["remote"]
 }
 
 // Config holds the runtime configuration for the scale service
