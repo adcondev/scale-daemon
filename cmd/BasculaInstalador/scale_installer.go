@@ -19,38 +19,25 @@ import (
 	embedded "github.com/adcondev/scale-daemon"
 )
 
-// Variable de build - via ldflags
+// Variables injected by Taskfile (ldflags)
 var (
 	BuildEnvironment = "remote"
 	BuildDate        = "unknown"
 	BuildTime        = "unknown"
+
+	// INJECTED NAMES
+	ServiceName        = "BasculaServicio"     // Registry Name
+	ServiceDisplayName = "Servicio de Bascula" // Services.msc Name
+	ServiceExeName     = "BasculaServicio.exe" // Filename on Disk
+)
+
+const (
+	serviceDescription = "Servicio WebSocket y Serial para bascula"
 )
 
 // Serializar binario embebido según entorno
 func getEmbeddedService() []byte {
 	return embedded.BasculaServicio
-}
-
-const (
-	serviceName        = "BasculaServicio"
-	serviceNameTest    = "BasculaServicioTest"
-	serviceDisplayName = "Servicio de Bascula"
-	serviceDescription = "Servicio WebSocket y Serial para bascula"
-)
-
-// Obtener nombre de servicio segun entorno
-func getServiceName() string {
-	if BuildEnvironment == "local" {
-		return serviceNameTest
-	}
-	return serviceName
-}
-
-func getServiceDisplayName() string {
-	if BuildEnvironment == "local" {
-		return serviceDisplayName + " LOCAL"
-	}
-	return serviceDisplayName + " REMOTE"
 }
 
 // Environment colors
@@ -71,7 +58,7 @@ func getBanner() string {
 
 	return fmt.Sprintf(`
 ╔═════════════════════════════════════════════╗
-║             SCALE DAEMON v1.2.0             ║
+║             SCALE DAEMON v1.3.0             ║
 ║                                             ║
 ║     ____     /                _             ║
 ║    | __ )  __ _ ___  ___ _  _| | __ _       ║
@@ -80,7 +67,7 @@ func getBanner() string {
 ║    |____/ \__,_|___/\___|\_,_|_|\__,_|      ║
 ║                                             ║
 ║           Instalador de Servicio            ║
-║           (C) 2025 Red2000 - %s          ║
+║           (C) 2025 Red2000 - %s         ║
 ╚═════════════════════════════════════════════╝`,
 		envLabel,
 	)
@@ -614,7 +601,7 @@ func (m model) handleLogsMenuSelection() (model, tea.Cmd) {
 		return m, nil
 
 	case "Abrir Ubicación":
-		logDir := filepath.Join(os.Getenv("PROGRAMDATA"), getServiceName())
+		logDir := filepath.Join(os.Getenv("PROGRAMDATA"), ServiceName)
 		_ = exec.Command("explorer", logDir).Start()
 		m.statusMessage = "Abriendo carpeta de logs..."
 		return m, nil
@@ -810,7 +797,7 @@ func (m model) viewResult() string {
 
 // Service commands
 func restartServiceCmd() tea.Cmd {
-	svcName := getServiceName()
+	svcName := ServiceName
 	return func() tea.Msg {
 		stopCmd := exec.Command("sc", "stop", svcName)
 		_ = stopCmd.Run()
@@ -849,9 +836,10 @@ func installServiceCmd() tea.Cmd {
 			}
 		}
 
-		svcName := getServiceName()
+		// USE INJECTED VARIABLES
+		svcName := ServiceName
 		targetDir := filepath.Join(os.Getenv("ProgramFiles"), svcName)
-		targetPath := filepath.Join(targetDir, svcName+".exe")
+		targetPath := filepath.Join(targetDir, ServiceExeName)
 
 		if err := os.MkdirAll(targetDir, 0755); err != nil {
 			return operationDoneMsg{
@@ -870,7 +858,7 @@ func installServiceCmd() tea.Cmd {
 		cmd := exec.Command("sc", "create", svcName,
 			fmt.Sprintf("binPath=%s", targetPath),
 			"start=auto",
-			fmt.Sprintf("DisplayName=%s", getServiceDisplayName()))
+			fmt.Sprintf("DisplayName=%s", ServiceDisplayName))
 
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return operationDoneMsg{
@@ -899,7 +887,7 @@ func installServiceCmd() tea.Cmd {
 }
 
 func uninstallServiceCmd() tea.Cmd {
-	svcName := getServiceName()
+	svcName := ServiceName
 	return func() tea.Msg {
 		if !isAdmin() {
 			return operationDoneMsg{
@@ -932,7 +920,7 @@ func uninstallServiceCmd() tea.Cmd {
 }
 
 func startServiceCmd() tea.Cmd {
-	svcName := getServiceName()
+	svcName := ServiceName
 	return func() tea.Msg {
 		cmd := exec.Command("sc", "start", svcName)
 		if output, err := cmd.CombinedOutput(); err != nil {
@@ -961,7 +949,7 @@ func startServiceCmd() tea.Cmd {
 }
 
 func stopServiceCmd() tea.Cmd {
-	svcName := getServiceName()
+	svcName := ServiceName
 	return func() tea.Msg {
 		cmd := exec.Command("sc", "stop", svcName)
 		if output, err := cmd.CombinedOutput(); err != nil {
@@ -985,7 +973,7 @@ func stopServiceCmd() tea.Cmd {
 }
 
 func checkServiceStatus() string {
-	cmd := exec.Command("sc", "query", getServiceName())
+	cmd := exec.Command("sc", "query", ServiceName)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "NOT INSTALLED"
@@ -1005,7 +993,7 @@ func isAdmin() bool {
 }
 
 func viewLogs() {
-	logPath := filepath.Join(os.Getenv("PROGRAMDATA"), getServiceName(), getServiceName()+".log")
+	logPath := filepath.Join(os.Getenv("PROGRAMDATA"), ServiceName, ServiceName+".log")
 	_ = exec.Command("notepad.exe", logPath).Start()
 }
 

@@ -1,26 +1,53 @@
 # https://taskfile.dev
 # Scale Daemon - Task Runner
-# Dev: Adrián Constante @ Red2000 2026
+# Source of Truth for Naming Conventions
 
 version: '3'
 
-silent: true
+silent: false
 
 vars:
-  SERVICE_NAME: R2k_BasculaServicio
-  INSTALLER_NAME: R2k_BasculaInstalador
-
-  BINARY_LOCAL: BasculaServicio_Local.exe
-  BINARY_REMOTE: BasculaServicio_Remote.exe
-
-  # Output names (R2k prefix convention)
-  INSTALLER_LOCAL: R2k_Instalador_Bascula_Local.exe
-  INSTALLER_REMOTE: R2k_Instalador_Bascula_Remote.exe
+  # ===========================================================================
+  # 📝 CONFIGURATION & NAMING (SOURCE OF TRUTH)
+  # ===========================================================================
 
   # Directories
   BIN_DIR: ./bin
-  EMBED_DIR: ./embedded/bin
+  TMP_DIR: ./tmp
 
+  # 1. Internal Go Build Paths
+  # Where the service binary is placed temporarily for embedding.
+  # NOTE: embedded.go EXPECTS this exact path. Do not change without updating embedded.go
+  EMBED_SOURCE_PATH: ./tmp/BasculaServicio.exe
+
+  # 2. Installer Output Filenames
+  # The final name of the installer executable provided to the user.
+  INSTALLER_EXE_LOCAL: R2k_Instalador_Bascula_Local.exe
+  INSTALLER_EXE_REMOTE: R2k_Instalador_Bascula_Remote.exe
+
+  # 3. Windows Service Configuration (Injected via ldflags)
+  # These control how the service appears in Windows (Task Manager / Services.msc)
+
+  # --- REMOTE ---
+  # Service ID in Registry (sc query NAME)
+  SVC_ID_REMOTE: "R2k_Bascula_Remote"
+  # Display Name in Services.msc
+  SVC_DISPLAY_REMOTE: "R2k Bascula Service (REMOTE)"
+  # The actual .exe filename on the user's disk (Task Manager Process Name)
+  SVC_EXE_NAME_REMOTE: "R2k_BasculaServicio_Remoto.exe"
+
+  # --- LOCAL ---
+  SVC_ID_LOCAL: "R2k_Bascula_Local"
+  SVC_DISPLAY_LOCAL: "R2k Bascula Service (LOCAL)"
+  SVC_EXE_NAME_LOCAL: "R2k_BasculaServicio_Local.exe"
+
+  # --- CONSOLE ---
+  CMD_ID_REMOTE: "R2k_BasculaCmd_Remote"
+  CMD_EXE_NAME_REMOTE: "R2k_BasculaConsole_Remote.exe"
+  CMD_ID_LOCAL: "R2k_BasculaCmd_Local"
+  CMD_EXE_NAME_LOCAL: "R2k_BasculaConsole_Local.exe"
+
+  # Versioning
   VERSION: '1.2.0'
 
 env:
@@ -32,153 +59,127 @@ tasks:
   default:
     desc: "📋 Show all available tasks"
     cmds:
-      - |
-        echo ""
-        echo "╔═══════════════════════════════════════════════════════════╗"
-        echo "║           SCALE DAEMON - Task Runner v{{.VERSION}}              ║"
-        echo "╚═══════════════════════════════════════════════════════════╝"
-        echo ""
-        echo "🚀 QUICK START:"
-        echo "   task build:local   Build LOCAL installer (localhost:8765)"
-        echo "   task build:remote  Build REMOTE installer (0.0.0.0:8765)"
-        echo "   task build:all     Build both installers"
-        echo ""
       - task --list-all
 
-  # ===========================================================================
-  # 📦 DEPENDENCIES
-  # ===========================================================================
   deps:
-    desc: "📦 Download and install Go dependencies"
+    desc: "📦 Download Go dependencies"
     cmds:
-      - echo "📦 Downloading dependencies..."
-      - go mod download
-      - go mod tidy
-      - go mod verify
-      - echo "✅ Dependencies installed"
+      - go mod download && go mod tidy
+      - echo "✅ Dependencies ready"
 
   # ===========================================================================
-  # 🏗️ SERVICE BUILD
+  # 🏗️ SERVICE BUILDERS (INTERMEDIATE STEP)
   # ===========================================================================
-  service:build:local:
-    desc: "🔨 Build Service for LOCAL (localhost:8765)"
-    vars:
-      BUILD_DATE:
-        sh: powershell -Command "Get-Date -Format 'yyyy-MM-dd'"
-      BUILD_TIME:
-        sh: powershell -Command "Get-Date -Format 'HH:mm:ss'"
+  # These tasks compile the service and place it where the Installer expects it.
+
+  ws:prepare:
+    desc: "🛠️ Prepare TMP directory"
     cmds:
-      - mkdir -p {{.EMBED_DIR}}
-      - go build -ldflags "-s -w -H=windowsgui -X main.BuildEnvironment=local -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.EMBED_DIR}}/{{.BINARY_LOCAL}}.exe ./cmd/BasculaServicio
-      - echo "✅ Service compiled for LOCAL (localhost:8765)"
+      - mkdir -p {{.TMP_DIR}}
+      - touch {{.EMBED_SOURCE_PATH}}
+      - echo "✅ TMP directory ready at:{{.TMP_DIR}}"
+      - mkdir -p {{.BIN_DIR}}
+      - echo "✅ BIN directory ready at:{{.BIN_DIR}}"
+
+  service:build:console:
+    desc: "🔨 Compile Service with CONSOLE configuration"
+    deps: [ ws:prepare ]
+    vars:
+      BUILD_DATE: { sh: powershell -Command "Get-Date -Format 'yyyy-MM-dd'" }
+      BUILD_TIME: { sh: powershell -Command "Get-Date -Format 'HH:mm:ss'" }
+    cmds:
+      # INJECTION: We pass the Names directly to the Go code here
+      - go build -ldflags "-X main.BuildEnvironment=local -X main.ServiceName={{.CMD_ID_LOCAL}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.BIN_DIR}}/{{.CMD_EXE_NAME_LOCAL}} ./cmd/BasculaServicio
+      - echo "✅ Console (LOCAL) compiled to:{{.BIN_DIR}}/{{.CMD_EXE_NAME_LOCAL}}"
+      - go build -ldflags "-X main.BuildEnvironment=remote -X main.ServiceName={{.CMD_ID_REMOTE}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.BIN_DIR}}/{{.CMD_EXE_NAME_REMOTE}} ./cmd/BasculaServicio
+      - echo "✅ Console (REMOTE) compiled to:{{.BIN_DIR}}/{{.CMD_EXE_NAME_REMOTE}}"
+
+  service:build:local:
+    desc: "🔨 Compile Service with LOCAL configuration"
+    deps: [ ws:prepare ]
+    vars:
+      BUILD_DATE: { sh: powershell -Command "Get-Date -Format 'yyyy-MM-dd'" }
+      BUILD_TIME: { sh: powershell -Command "Get-Date -Format 'HH:mm:ss'" }
+    cmds:
+      - mkdir -p {{.TMP_DIR}}
+      # INJECTION: We pass the Names directly to the Go code here
+      - go build -ldflags "-s -w -H=windowsgui -X main.BuildEnvironment=local -X main.ServiceName={{.SVC_ID_LOCAL}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.EMBED_SOURCE_PATH}} ./cmd/BasculaServicio
+      - echo "✅ Service (LOCAL) compiled to temporary path:{{.EMBED_SOURCE_PATH}}"
+      - cp {{.EMBED_SOURCE_PATH}} {{.BIN_DIR}}/{{.SVC_EXE_NAME_LOCAL}}
+      - echo "✅ Service (LOCAL) copied to embed path:{{.TMP_DIR}}/{{.SVC_EXE_NAME_LOCAL}}"
 
   service:build:remote:
-    desc: "🔨 Build Service for REMOTE (0.0.0.0:8765)"
+    desc: "🔨 Compile Service with REMOTE configuration"
+    deps: [ ws:prepare ]
     vars:
-      BUILD_DATE:
-        sh: powershell -Command "Get-Date -Format 'yyyy-MM-dd'"
-      BUILD_TIME:
-        sh: powershell -Command "Get-Date -Format 'HH:mm:ss'"
+      BUILD_DATE: { sh: powershell -Command "Get-Date -Format 'yyyy-MM-dd'" }
+      BUILD_TIME: { sh: powershell -Command "Get-Date -Format 'HH:mm:ss'" }
     cmds:
-      - mkdir -p {{.EMBED_DIR}}
-      - go build -ldflags "-s -w -H=windowsgui -X main.BuildEnvironment=remote -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.EMBED_DIR}}/BasculaServicio.exe ./cmd/BasculaServicio
-      - echo "✅ Service compiled for REMOTE (0.0.0.0:8765)"
+      - mkdir -p {{.TMP_DIR}}
+      # INJECTION: We pass the Names directly to the Go code here
+      - go build -ldflags "-s -w -H=windowsgui -X main.BuildEnvironment=remote -X main.ServiceName={{.SVC_ID_REMOTE}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.EMBED_SOURCE_PATH}} ./cmd/BasculaServicio
+      - echo "✅ Service (REMOTE) compiled to temporary path:{{.EMBED_SOURCE_PATH}}"
+      - cp {{.EMBED_SOURCE_PATH}} {{.BIN_DIR}}/{{.SVC_EXE_NAME_REMOTE}}
+      - echo "✅ Service (REMOTE) copied to embed path:{{.TMP_DIR}}/{{.SVC_EXE_NAME_REMOTE}}"
 
   # ===========================================================================
-  # 📦 INSTALLER BUILD
+  # 📦 INSTALLER BUILDERS (FINAL ARTIFACT)
   # ===========================================================================
+
   installer:local:
-    desc: "📦 Build Installer with LOCAL service embedded"
-    deps: [service:build:local]
+    desc: "📦 Build Installer (Local/Dev)"
+    deps: [ service:build:local ]
     vars:
-      BUILD_DATE:
-        sh: powershell -Command "Get-Date -Format 'yyyy-MM-dd'"
-      BUILD_TIME:
-        sh: powershell -Command "Get-Date -Format 'HH:mm:ss'"
+      BUILD_DATE: { sh: powershell -Command "Get-Date -Format 'yyyy-MM-dd'" }
+      BUILD_TIME: { sh: powershell -Command "Get-Date -Format 'HH:mm:ss'" }
     cmds:
       - mkdir -p {{.BIN_DIR}}
-      - go build -ldflags "-s -w -X main.BuildEnvironment=local -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.BIN_DIR}}/{{.INSTALLER_LOCAL}} ./cmd/BasculaInstalador
-      - echo "📦 Created {{.BIN_DIR}}/{{.INSTALLER_LOCAL}}"
+      - go build -ldflags "-s -w -X main.BuildEnvironment=local -X main.ServiceName={{.SVC_ID_LOCAL}} -X \"main.ServiceDisplayName={{.SVC_DISPLAY_LOCAL}}\" -X main.ServiceExeName={{.SVC_EXE_NAME_LOCAL}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.BIN_DIR}}/{{.INSTALLER_EXE_LOCAL}} ./cmd/BasculaInstalador
+      - echo "📦 Created:{{.BIN_DIR}}/{{.INSTALLER_EXE_LOCAL}}"
 
   installer:remote:
-    desc: "📦 Build Installer with REMOTE service embedded"
-    deps: [service:build:remote]
+    desc: "📦 Build Installer (Remote/Prod)"
+    deps: [ service:build:remote ]
     vars:
-      BUILD_DATE:
-        sh: powershell -Command "Get-Date -Format 'yyyy-MM-dd'"
-      BUILD_TIME:
-        sh: powershell -Command "Get-Date -Format 'HH:mm:ss'"
+      BUILD_DATE: { sh: powershell -Command "Get-Date -Format 'yyyy-MM-dd'" }
+      BUILD_TIME: { sh: powershell -Command "Get-Date -Format 'HH:mm:ss'" }
     cmds:
       - mkdir -p {{.BIN_DIR}}
-      - go build -ldflags "-s -w -X main.BuildEnvironment=remote -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.BIN_DIR}}/{{.INSTALLER_REMOTE}} ./cmd/BasculaInstalador
-      - echo "📦 Created {{.BIN_DIR}}/{{.INSTALLER_REMOTE}}"
+      - go build -ldflags "-s -w -X main.BuildEnvironment=remote -X main.ServiceName={{.SVC_ID_REMOTE}} -X \"main.ServiceDisplayName={{.SVC_DISPLAY_REMOTE}}\" -X main.ServiceExeName={{.SVC_EXE_NAME_REMOTE}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.BIN_DIR}}/{{.INSTALLER_EXE_REMOTE}} ./cmd/BasculaInstalador
+      - echo "📦 Created:{{.BIN_DIR}}/{{.INSTALLER_EXE_REMOTE}}"
 
   # ===========================================================================
-  # 🚀 HIGH-LEVEL BUILD COMMANDS
+  # 🚀 COMMANDS
   # ===========================================================================
   build:local:
-    desc: "🏠 Build everything for LOCAL environment"
+    desc: "🏠 Full Build for LOCAL"
     cmds:
       - task: installer:local
-      - echo ""
-      - echo "╔════════════════════════════════════════╗"
-      - echo "║   ✅ LOCAL BUILD COMPLETE              ║"
-      - echo "║   → {{.BIN_DIR}}/{{.INSTALLER_LOCAL}}  ║"
-      - echo "║   → Listens on localhost:8765          ║"
-      - echo "╚════════════════════════════════════════╝"
+      - echo "✅ LOCAL Build Complete"
 
   build:remote:
-    desc: "🌐 Build everything for REMOTE environment"
+    desc: "🌐 Full Build for REMOTE"
     cmds:
       - task: installer:remote
-      - echo ""
-      - echo "╔════════════════════════════════════════╗"
-      - echo "║   ✅ REMOTE BUILD COMPLETE             ║"
-      - echo "║   → {{.BIN_DIR}}/{{.INSTALLER_REMOTE}} ║"
-      - echo "║   → Listens on 0.0.0.0:8765            ║"
-      - echo "╚═════════��══════════════════════════════╝"
+      - echo "✅ REMOTE Build Complete"
+
+  build:console:
+    desc: "🖥️ Build CONSOLE versions"
+    cmds:
+      - task: service:build:console
+      - echo "✅ CONSOLE Build Complete"
 
   build:all:
-    desc: "🏗️ Build both LOCAL and REMOTE installers"
+    desc: "🏗️ Build BOTH environments"
     cmds:
+      - task: build:console
       - task: build:local
       - task: build:remote
-      - echo ""
-      - echo "╔════════════════════════════════════════╗"
-      - echo "║   ✅ ALL BUILDS COMPLETE               ║"
-      - echo "╚════════════════════════════════════════╝"
-      - ls -la {{.BIN_DIR}}/*.exe
+      - echo "✅ All builds complete"
 
-  # ===========================================================================
-  # 🧪 TESTING
-  # ===========================================================================
-  test:
-    desc: "🧪 Run all tests"
-    cmds:
-      - echo "🧪 Running tests..."
-      - go test -v ./...
-
-  test:unit:
-    desc: "🧪 Run unit tests only (fast)"
-    cmds:
-      - echo "🧪 Unit tests..."
-      - go test -v -short ./...
-
-  bench:
-    desc: "⚡ Run benchmarks"
-    cmds:
-      - echo "⚡ Running benchmarks..."
-      - go test -bench=. -benchmem ./...
-
-  # ===========================================================================
-  # 🧹 CLEANUP
-  # ===========================================================================
   clean:
-    desc: "🧹 Remove all build artifacts"
+    desc: "🧹 Cleanup"
     cmds:
-      - echo "🧹 Cleaning..."
-      - cmd: if exist {{.BIN_DIR}} rmdir /s /q {{.BIN_DIR}}
-        ignore_error: true
-      - cmd: if exist {{.EMBED_DIR}} rmdir /s /q {{.EMBED_DIR}}
-        ignore_error: true
+      - rm -rf {{.BIN_DIR}}
+      - rm -rf {{.TMP_DIR}}
       - echo "✅ Clean complete"
