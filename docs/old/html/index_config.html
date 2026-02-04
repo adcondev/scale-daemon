@@ -19,7 +19,7 @@
 
 <script>
     (function () {
-        const wsUrl = "ws://localhost:8765";
+        const wsUrl = "ws://localhost:8765/ws";
         let socket = null;
         let reconnectDelay = 3000;
         let isConnected = false;
@@ -30,7 +30,7 @@
                 puerto: document.getElementById("puerto").value || "COM3",
                 marca: document.getElementById("marca").value || "Rhino BAR 8RS",
                 modoPrueba: document.getElementById("modoPrueba").checked,
-                dir: document.getElementById("direccionWs").value || "ws://localhost:8765"
+                dir: document.getElementById("direccionWs").value || "ws://localhost:8765/ws"
             };
         }
 
