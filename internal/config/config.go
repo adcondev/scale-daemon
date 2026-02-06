@@ -11,24 +11,23 @@ type Environment struct {
 	ServiceName string
 	ListenAddr  string
 	DefaultPort string
-	DefaultMode bool // true = test mode (simulated weights)
+	DefaultMode bool // false = test mode (simulated weights)
 }
 
 // TODO: Make Port inyectable via ldflags. Same port and addres could cause conflicts
-// TODO: Frontend should handle the new naming of envs, local and remote
 
 // Environments defines available deployment configurations
 var Environments = map[string]Environment{
 	"remote": {
 		Name:        "REMOTO",
-		ServiceName: "BasculaServicio_Remoto",
+		ServiceName: "R2k_BasculaServicio_Remoto",
 		ListenAddr:  "0.0.0.0:8765",
 		DefaultPort: "COM3",
 		DefaultMode: true,
 	},
 	"local": {
 		Name:        "LOCAL",
-		ServiceName: "BasculaServicio_Local",
+		ServiceName: "R2k_BasculaServicio_Local",
 		ListenAddr:  "localhost:8765",
 		DefaultPort: "COM3",
 		DefaultMode: true,

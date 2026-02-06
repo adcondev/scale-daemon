@@ -33,6 +33,7 @@ type Server struct {
 	startTime      time.Time
 	mu             sync.RWMutex
 	lastWeightTime time.Time
+	httpServer     *http.Server
 }
 
 // NewServer creates a new server instance
@@ -47,7 +48,7 @@ func NewServer(
 	buildTime string,
 	startTime time.Time,
 ) *Server {
-	return &Server{
+	s := &Server{
 		config:         cfg,
 		env:            env,
 		broadcaster:    broadcaster,
@@ -58,6 +59,32 @@ func NewServer(
 		buildTime:      buildTime,
 		startTime:      startTime,
 	}
+
+	// Setup HTTP handlers
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", s.handleWebSocket)
+	mux.HandleFunc("/health", s.HandleHealth)
+	mux.HandleFunc("/ping", s.HandlePing)
+
+	// Setup FS
+	webFS, err := fs.Sub(embedded.WebFiles, "internal/assets/web")
+	if err != nil {
+		// Panic is acceptable here as service cannot function without assets
+		log.Fatalf("[FATAL] Error loading web assets: %v", err)
+	}
+	mux.Handle("/", http.FileServer(http.FS(webFS)))
+
+	// This ensures s.httpServer is NEVER nil once NewServer returns
+	s.httpServer = &http.Server{
+		Addr:    env.ListenAddr,
+		Handler: mux,
+		// ALWAYS add timeouts to prevent Slowloris attacks
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	return s
 }
 
 // handleWebSocket upgrades the connection
@@ -278,26 +305,17 @@ func (s *Server) recordWeightActivity() {
 
 // ListenAndServe inicia el servidor HTTP
 func (s *Server) ListenAndServe() error {
-	// 1. Create a new Router (Mux)
-	mux := http.NewServeMux()
-
-	// 2. Register WebSocket endpoint at /ws
-	mux.HandleFunc("/ws", s.handleWebSocket)
-	mux.HandleFunc("/health", s.HandleHealth)
-	mux.HandleFunc("/ping", s.HandlePing)
-
-	// 3. Serve Static Files at Root (/)
-	// We extract the sub-filesystem so index.html is at the root of the file server
-	webFS, err := fs.Sub(embedded.WebFiles, "internal/assets/web")
-	if err != nil {
-		log.Fatalf("[FATAL] Error loading web assets: %v", err)
-	}
-
-	// http.FileServer automatically serves index.html for "/"
-	mux.Handle("/", http.FileServer(http.FS(webFS)))
-
 	log.Printf("[i] Dashboard active at http://%s/", s.env.ListenAddr)
 	log.Printf("[i] WebSocket active at ws://%s/ws", s.env.ListenAddr)
 
-	return http.ListenAndServe(s.env.ListenAddr, mux)
+	// Just start the already-configured server
+	return s.httpServer.ListenAndServe()
+}
+
+// Shutdown gracefully shuts down the HTTP server
+func (s *Server) Shutdown(ctx context.Context) error {
+	if s.httpServer != nil {
+		return s.httpServer.Shutdown(ctx)
+	}
+	return nil
 }

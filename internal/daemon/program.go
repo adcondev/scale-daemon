@@ -132,20 +132,35 @@ func (s *Service) run() {
 func (s *Service) Stop() error {
 	log.Println("[.] Servicio deteniéndose...")
 
-	// Signal stop
+	// 1. Cancel the context (signals broadcaster and reader)
 	s.cancel()
 
-	// Stop reader
+	// 2. Stop the serial reader
 	s.reader.Stop()
 
-	// Wait for goroutines
+	// 3. Gracefully shut down the HTTP/WS server (with timeout)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	if err := s.srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("[!] Error al cerrar servidor HTTP: %v", err)
+	}
+
+	// 4. Close the quit channel safely
+	select {
+	case <-s.quit:
+		// Already closed, do nothing
+	default:
+		close(s.quit)
+	}
+
+	// 5. Now wg.Wait() will return because run() can unblock
 	s.wg.Wait()
 
-	// Close log file
+	// 6. Close log file
 	if s.logMgr != nil {
-		err := s.logMgr.Close()
-		if err != nil {
-			return err
+		if err := s.logMgr.Close(); err != nil {
+			log.Printf("[!] Error al cerrar logs: %v", err)
 		}
 	}
 
