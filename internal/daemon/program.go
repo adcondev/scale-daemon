@@ -19,6 +19,7 @@ import (
 type Service struct {
 	// Build info (injected via ldflags)
 	BuildEnvironment string
+	ServiceName      string // For logging path (overrides config if set)
 	BuildDate        string
 	BuildTime        string
 	timeStart        time.Time
@@ -40,9 +41,10 @@ type Service struct {
 }
 
 // New creates a new service instance
-func New(buildEnv, buildDate, buildTime string) *Service {
+func New(buildEnv, serviceName, buildDate, buildTime string) *Service {
 	return &Service{
 		BuildEnvironment: buildEnv,
+		ServiceName:      serviceName,
 		BuildDate:        buildDate,
 		BuildTime:        buildTime,
 		broadcast:        make(chan string, 100),
@@ -54,9 +56,16 @@ func (s *Service) Init(env svc.Environment) error {
 	s.timeStart = time.Now()
 	s.env = config.GetEnvironment(s.BuildEnvironment)
 
+	// Determine which service name to use for logging
+	// Priority: injected ServiceName > environment ServiceName
+	logServiceName := s.env.ServiceName
+	if s.ServiceName != "" {
+		logServiceName = s.ServiceName
+	}
+
 	// Setup logging
 	defaultVerbose := s.BuildEnvironment == "test"
-	logMgr, err := logging.Setup(s.env.ServiceName, defaultVerbose)
+	logMgr, err := logging.Setup(logServiceName, defaultVerbose)
 	if err != nil {
 		return err
 	}
