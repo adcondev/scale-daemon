@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"sync"
 	"time"
 
@@ -128,7 +129,8 @@ func (s *Service) run() {
 
 	// Start HTTP server
 	go func() {
-		if err := s.srv.ListenAndServe(); err != nil {
+		// http.ErrServerClosed is expected when Shutdown() is called
+		if err := s.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("[X] Error al iniciar servidor: %v", err)
 			close(s.quit)
 		}
