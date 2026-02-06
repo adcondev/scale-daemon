@@ -22,8 +22,11 @@ type Service struct {
 	BuildEnvironment string
 	BuildDate        string
 	BuildTime        string
-	ServiceName      string // Injected service name for logging
-	timeStart        time.Time
+	// ServiceName is injected via ldflags during build and used for logging.
+	// It takes precedence over the environment config's ServiceName for log directory naming.
+	// This ensures log paths match the Windows service registry name expected by installers.
+	ServiceName string
+	timeStart   time.Time
 
 	// Components
 	env         config.Environment
