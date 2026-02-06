@@ -58,7 +58,7 @@ func (s *Service) Init(env svc.Environment) error {
 	s.env = config.GetEnvironment(s.BuildEnvironment)
 
 	// Determine which service name to use for logging
-	// Priority: injected ServiceName > environment ServiceName
+	// Priority: injected ServiceName takes precedence over environment ServiceName
 	logServiceName := s.env.ServiceName
 	if s.ServiceName != "" {
 		logServiceName = s.ServiceName

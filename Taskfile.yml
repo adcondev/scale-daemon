@@ -34,8 +34,9 @@ vars:
   # Display Name in Services.msc
   SVC_DISPLAY_REMOTE: "R2k Bascula Service (REMOTE)"
   # The actual .exe filename on the user's disk (Task Manager Process Name)
+  # Note: Uses "Remoto" (Spanish) for historical reasons
   SVC_EXE_NAME_REMOTE: "R2k_BasculaServicio_Remoto.exe"
-  # Log directory name (must match TUI expectations)
+  # Log directory name (must match TUI expectations - uses "Remote" in English)
   SVC_LOG_NAME_REMOTE: "R2k_BasculaServicio_Remote"
 
   # --- LOCAL ---
