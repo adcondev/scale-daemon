@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"sync"
 	"time"
 
@@ -21,6 +22,7 @@ type Service struct {
 	BuildEnvironment string
 	BuildDate        string
 	BuildTime        string
+	ServiceName      string // Injected service name for logging
 	timeStart        time.Time
 
 	// Components
@@ -40,11 +42,12 @@ type Service struct {
 }
 
 // New creates a new service instance
-func New(buildEnv, buildDate, buildTime string) *Service {
+func New(buildEnv, buildDate, buildTime, serviceName string) *Service {
 	return &Service{
 		BuildEnvironment: buildEnv,
 		BuildDate:        buildDate,
 		BuildTime:        buildTime,
+		ServiceName:      serviceName,
 		broadcast:        make(chan string, 100),
 	}
 }
@@ -54,9 +57,15 @@ func (s *Service) Init(env svc.Environment) error {
 	s.timeStart = time.Now()
 	s.env = config.GetEnvironment(s.BuildEnvironment)
 
+	// Use injected ServiceName if provided, otherwise fall back to environment config
+	serviceName := s.ServiceName
+	if serviceName == "" {
+		serviceName = s.env.ServiceName
+	}
+
 	// Setup logging
 	defaultVerbose := s.BuildEnvironment == "test"
-	logMgr, err := logging.Setup(s.env.ServiceName, defaultVerbose)
+	logMgr, err := logging.Setup(serviceName, defaultVerbose)
 	if err != nil {
 		return err
 	}
@@ -120,8 +129,11 @@ func (s *Service) run() {
 	// Start HTTP server
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil {
-			log.Printf("[X] Error al iniciar servidor: %v", err)
-			close(s.quit)
+			// http.ErrServerClosed is expected during graceful shutdown
+			if err != http.ErrServerClosed {
+				log.Printf("[X] Error al iniciar servidor: %v", err)
+				close(s.quit)
+			}
 		}
 	}()
 
