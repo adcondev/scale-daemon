@@ -22,11 +22,11 @@ type Service struct {
 	BuildEnvironment string
 	BuildDate        string
 	BuildTime        string
-	// ServiceName is injected via ldflags during build and used for logging.
-	// It takes precedence over the environment config's ServiceName for log directory naming.
-	// This ensures log paths match the Windows service registry name expected by installers.
-	ServiceName string
-	timeStart   time.Time
+	// LogServiceName is injected via ldflags during build and used for log directory naming.
+	// It takes precedence over the environment config's ServiceName for log directory paths.
+	// This is distinct from the Windows SCM service name and matches the Taskfile SVC_LOG_NAME_* vars.
+	LogServiceName string
+	timeStart      time.Time
 
 	// Components
 	env         config.Environment
@@ -45,12 +45,12 @@ type Service struct {
 }
 
 // New creates a new service instance
-func New(buildEnv, buildDate, buildTime, serviceName string) *Service {
+func New(buildEnv, buildDate, buildTime, logServiceName string) *Service {
 	return &Service{
 		BuildEnvironment: buildEnv,
 		BuildDate:        buildDate,
 		BuildTime:        buildTime,
-		ServiceName:      serviceName,
+		LogServiceName:   logServiceName,
 		broadcast:        make(chan string, 100),
 	}
 }
@@ -60,15 +60,15 @@ func (s *Service) Init(env svc.Environment) error {
 	s.timeStart = time.Now()
 	s.env = config.GetEnvironment(s.BuildEnvironment)
 
-	// Use injected ServiceName if provided, otherwise fall back to environment config
-	serviceName := s.ServiceName
-	if serviceName == "" {
-		serviceName = s.env.ServiceName
+	// Use injected LogServiceName if provided, otherwise fall back to environment config
+	logServiceName := s.LogServiceName
+	if logServiceName == "" {
+		logServiceName = s.env.ServiceName
 	}
 
 	// Setup logging
 	defaultVerbose := s.BuildEnvironment == "test"
-	logMgr, err := logging.Setup(serviceName, defaultVerbose)
+	logMgr, err := logging.Setup(logServiceName, defaultVerbose)
 	if err != nil {
 		return err
 	}

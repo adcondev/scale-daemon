@@ -108,7 +108,7 @@ tasks:
     cmds:
       - mkdir -p {{.TMP_DIR}}
       # INJECTION: We pass the Names directly to the Go code here
-      - go build -ldflags "-s -w -H=windowsgui -X main.BuildEnvironment=local -X main.ServiceName={{.SVC_LOG_NAME_LOCAL}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.EMBED_SOURCE_PATH}} ./cmd/BasculaServicio
+      - go build -ldflags "-s -w -H=windowsgui -X main.BuildEnvironment=local -X main.LogServiceName={{.SVC_LOG_NAME_LOCAL}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.EMBED_SOURCE_PATH}} ./cmd/BasculaServicio
       - echo "✅ Service (LOCAL) compiled to temporary path:{{.EMBED_SOURCE_PATH}}"
       - cp {{.EMBED_SOURCE_PATH}} {{.BIN_DIR}}/{{.SVC_EXE_NAME_LOCAL}}
       - echo "✅ Service (LOCAL) copied to embed path:{{.TMP_DIR}}/{{.SVC_EXE_NAME_LOCAL}}"
@@ -123,7 +123,7 @@ tasks:
     cmds:
       - mkdir -p {{.TMP_DIR}}
       # INJECTION: We pass the Names directly to the Go code here
-      - go build -ldflags "-s -w -H=windowsgui -X main.BuildEnvironment=remote -X main.ServiceName={{.SVC_LOG_NAME_REMOTE}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.EMBED_SOURCE_PATH}} ./cmd/BasculaServicio
+      - go build -ldflags "-s -w -H=windowsgui -X main.BuildEnvironment=remote -X main.LogServiceName={{.SVC_LOG_NAME_REMOTE}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.EMBED_SOURCE_PATH}} ./cmd/BasculaServicio
       - echo "✅ Service (REMOTE) compiled to temporary path:{{.EMBED_SOURCE_PATH}}"
       - cp {{.EMBED_SOURCE_PATH}} {{.BIN_DIR}}/{{.SVC_EXE_NAME_REMOTE}}
       - echo "✅ Service (REMOTE) copied to embed path:{{.TMP_DIR}}/{{.SVC_EXE_NAME_REMOTE}}"
