@@ -132,8 +132,8 @@ func (s *Service) run() {
 	// Start HTTP server
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil {
-			// http.ErrServerClosed is expected during graceful shutdown
-			// In that case, Stop() will close s.quit after calling Shutdown()
+			// http.ErrServerClosed is expected during graceful shutdown.
+			// Stop() closes s.quit after Shutdown() completes, avoiding double-close.
 			if err != http.ErrServerClosed {
 				log.Printf("[X] Error al iniciar servidor: %v", err)
 				close(s.quit)
@@ -164,7 +164,7 @@ func (s *Service) Stop() error {
 	}
 
 	// 4. Close the quit channel to unblock run()
-	// Safe even if already closed by error path in run()
+	// Safe because select checks if already closed by error path
 	select {
 	case <-s.quit:
 		// Already closed, do nothing
