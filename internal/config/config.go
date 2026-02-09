@@ -20,7 +20,7 @@ type Environment struct {
 var Environments = map[string]Environment{
 	"remote": {
 		Name:        "REMOTO",
-		ServiceName: "R2k_BasculaServicio_Remoto",
+		ServiceName: "R2k_BasculaServicio_Remote",
 		ListenAddr:  "0.0.0.0:8765",
 		DefaultPort: "COM3",
 		DefaultMode: true,
