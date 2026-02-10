@@ -136,6 +136,8 @@ func (s *Service) run() {
 			// Stop() closes s.quit after Shutdown() completes, avoiding double-close.
 			if err != http.ErrServerClosed {
 				log.Printf("[X] Error al iniciar servidor: %v", err)
+				// Cancel context to stop broadcaster and reader goroutines
+				s.cancel()
 				select {
 				case <-s.quit:
 					// Channel already closed; no action needed.
