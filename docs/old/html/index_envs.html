@@ -39,8 +39,16 @@
 
 <script>
     (function () {
-        let defaultWsUrl = `ws://${window.location.hostname}:8765`;
-        let wsUrl = document.getElementById("direccionWs").value || defaultWsUrl;
+        let defaultWsUrl = `ws://${window.location.hostname}:8765/ws`;
+        let direccionWsValue = document.getElementById("direccionWs").value.trim();
+        let wsUrl;
+        if (!direccionWsValue) {
+            wsUrl = defaultWsUrl;
+        } else if (direccionWsValue.endsWith("/ws")) {
+            wsUrl = direccionWsValue;
+        } else {
+            wsUrl = direccionWsValue + "/ws";
+        }
         let socket = null;
         let isConnected = false;
         let currentEnv = "unknown";

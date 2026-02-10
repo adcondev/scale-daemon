@@ -35,11 +35,15 @@ vars:
   SVC_DISPLAY_REMOTE: "R2k Bascula Service (REMOTE)"
   # The actual .exe filename on the user's disk (Task Manager Process Name)
   SVC_EXE_NAME_REMOTE: "R2k_BasculaServicio_Remoto.exe"
+  # Service name for logging (matches log directory convention)
+  SVC_LOG_NAME_REMOTE: "R2k_BasculaServicio_Remote"
 
   # --- LOCAL ---
   SVC_ID_LOCAL: "R2k_Bascula_Local"
   SVC_DISPLAY_LOCAL: "R2k Bascula Service (LOCAL)"
   SVC_EXE_NAME_LOCAL: "R2k_BasculaServicio_Local.exe"
+  # Service name for logging (matches log directory convention)
+  SVC_LOG_NAME_LOCAL: "R2k_BasculaServicio_Local"
 
   # --- CONSOLE ---
   CMD_ID_REMOTE: "R2k_BasculaCmd_Remote"
@@ -104,7 +108,7 @@ tasks:
     cmds:
       - mkdir -p {{.TMP_DIR}}
       # INJECTION: We pass the Names directly to the Go code here
-      - go build -ldflags "-s -w -H=windowsgui -X main.BuildEnvironment=local -X main.ServiceName={{.SVC_ID_LOCAL}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.EMBED_SOURCE_PATH}} ./cmd/BasculaServicio
+      - go build -ldflags "-s -w -H=windowsgui -X main.BuildEnvironment=local -X main.LogServiceName={{.SVC_LOG_NAME_LOCAL}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.EMBED_SOURCE_PATH}} ./cmd/BasculaServicio
       - echo "✅ Service (LOCAL) compiled to temporary path:{{.EMBED_SOURCE_PATH}}"
       - cp {{.EMBED_SOURCE_PATH}} {{.BIN_DIR}}/{{.SVC_EXE_NAME_LOCAL}}
       - echo "✅ Service (LOCAL) copied to embed path:{{.TMP_DIR}}/{{.SVC_EXE_NAME_LOCAL}}"
@@ -119,7 +123,7 @@ tasks:
     cmds:
       - mkdir -p {{.TMP_DIR}}
       # INJECTION: We pass the Names directly to the Go code here
-      - go build -ldflags "-s -w -H=windowsgui -X main.BuildEnvironment=remote -X main.ServiceName={{.SVC_ID_REMOTE}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.EMBED_SOURCE_PATH}} ./cmd/BasculaServicio
+      - go build -ldflags "-s -w -H=windowsgui -X main.BuildEnvironment=remote -X main.LogServiceName={{.SVC_LOG_NAME_REMOTE}} -X main.BuildDate={{.BUILD_DATE}} -X main.BuildTime={{.BUILD_TIME}}" -o {{.EMBED_SOURCE_PATH}} ./cmd/BasculaServicio
       - echo "✅ Service (REMOTE) compiled to temporary path:{{.EMBED_SOURCE_PATH}}"
       - cp {{.EMBED_SOURCE_PATH}} {{.BIN_DIR}}/{{.SVC_EXE_NAME_REMOTE}}
       - echo "✅ Service (REMOTE) copied to embed path:{{.TMP_DIR}}/{{.SVC_EXE_NAME_REMOTE}}"

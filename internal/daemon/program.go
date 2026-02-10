@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"sync"
 	"time"
 
@@ -21,7 +22,11 @@ type Service struct {
 	BuildEnvironment string
 	BuildDate        string
 	BuildTime        string
-	timeStart        time.Time
+	// LogServiceName is injected via ldflags during build and used for log directory naming.
+	// It takes precedence over the environment config's ServiceName for log directory paths.
+	// This is distinct from the Windows SCM service name and matches the Taskfile SVC_LOG_NAME_* vars.
+	LogServiceName string
+	timeStart      time.Time
 
 	// Components
 	env         config.Environment
@@ -40,11 +45,12 @@ type Service struct {
 }
 
 // New creates a new service instance
-func New(buildEnv, buildDate, buildTime string) *Service {
+func New(buildEnv, buildDate, buildTime, logServiceName string) *Service {
 	return &Service{
 		BuildEnvironment: buildEnv,
 		BuildDate:        buildDate,
 		BuildTime:        buildTime,
+		LogServiceName:   logServiceName,
 		broadcast:        make(chan string, 100),
 	}
 }
@@ -54,9 +60,15 @@ func (s *Service) Init(env svc.Environment) error {
 	s.timeStart = time.Now()
 	s.env = config.GetEnvironment(s.BuildEnvironment)
 
+	// Use injected LogServiceName if provided, otherwise fall back to environment config
+	logServiceName := s.LogServiceName
+	if logServiceName == "" {
+		logServiceName = s.env.ServiceName
+	}
+
 	// Setup logging
 	defaultVerbose := s.BuildEnvironment == "test"
-	logMgr, err := logging.Setup(s.env.ServiceName, defaultVerbose)
+	logMgr, err := logging.Setup(logServiceName, defaultVerbose)
 	if err != nil {
 		return err
 	}
@@ -120,8 +132,19 @@ func (s *Service) run() {
 	// Start HTTP server
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil {
-			log.Printf("[X] Error al iniciar servidor: %v", err)
-			close(s.quit)
+			// http.ErrServerClosed is expected during graceful shutdown.
+			// Stop() closes s.quit after Shutdown() completes, avoiding double-close.
+			if err != http.ErrServerClosed {
+				log.Printf("[X] Error al iniciar servidor: %v", err)
+				// Cancel context to stop broadcaster and reader goroutines
+				s.cancel()
+				select {
+				case <-s.quit:
+					// Channel already closed; no action needed.
+				default:
+					close(s.quit)
+				}
+			}
 		}
 	}()
 
@@ -132,20 +155,37 @@ func (s *Service) run() {
 func (s *Service) Stop() error {
 	log.Println("[.] Servicio deteniéndose...")
 
-	// Signal stop
+	// 1. Cancel the context (signals broadcaster and reader)
 	s.cancel()
 
-	// Stop reader
+	// 2. Stop the serial reader
 	s.reader.Stop()
 
-	// Wait for goroutines
+	// 3. Gracefully shut down the HTTP/WS server (with timeout)
+	// This causes ListenAndServe() to return with http.ErrServerClosed
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	if err := s.srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("[!] Error al cerrar servidor HTTP: %v", err)
+	}
+
+	// 4. Close the quit channel to unblock run()
+	// Safe because select checks if already closed by error path
+	select {
+	case <-s.quit:
+		// Already closed, do nothing
+	default:
+		close(s.quit)
+	}
+
+	// 5. Now wg.Wait() will return because run() can unblock
 	s.wg.Wait()
 
-	// Close log file
+	// 6. Close log file
 	if s.logMgr != nil {
-		err := s.logMgr.Close()
-		if err != nil {
-			return err
+		if err := s.logMgr.Close(); err != nil {
+			log.Printf("[!] Error al cerrar logs: %v", err)
 		}
 	}
 
