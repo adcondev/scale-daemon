@@ -314,8 +314,8 @@ func (s *Server) ListenAndServe() error {
 
 // Shutdown gracefully shuts down the HTTP server
 func (s *Server) Shutdown(ctx context.Context) error {
-	if s.httpServer != nil {
-		return s.httpServer.Shutdown(ctx)
+	if s.httpServer == nil {
+		return errors.New("server Shutdown called with nil httpServer; invariant violated")
 	}
-	return nil
+	return s.httpServer.Shutdown(ctx)
 }
