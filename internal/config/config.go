@@ -5,33 +5,39 @@ import (
 	"sync"
 )
 
+// Build variables (injected via ldflags)
+var (
+	BuildEnvironment = "local"
+	BuildDate        = "unknown"
+	BuildTime        = "unknown"
+)
+
 // Environment holds environment-specific settings
 type Environment struct {
 	Name        string
 	ServiceName string
 	ListenAddr  string
 	DefaultPort string
-	DefaultMode bool // true = test mode (simulated weights)
+	DefaultMode bool // true = test mode (simulated weights), false = real weights
 }
 
 // TODO: Make Port inyectable via ldflags. Same port and addres could cause conflicts
-// TODO: Frontend should handle the new naming of envs, local and remote
 
 // Environments defines available deployment configurations
 var Environments = map[string]Environment{
 	"remote": {
 		Name:        "REMOTO",
-		ServiceName: "BasculaServicio_Remoto",
+		ServiceName: "R2k_BasculaServicio_Remote",
 		ListenAddr:  "0.0.0.0:8765",
 		DefaultPort: "COM3",
-		DefaultMode: true,
+		DefaultMode: false,
 	},
 	"local": {
 		Name:        "LOCAL",
-		ServiceName: "BasculaServicio_Local",
+		ServiceName: "R2k_BasculaServicio_Local",
 		ListenAddr:  "localhost:8765",
 		DefaultPort: "COM3",
-		DefaultMode: true,
+		DefaultMode: false,
 	},
 }
 
