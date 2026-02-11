@@ -85,10 +85,16 @@ function handleWeightReading(peso) {
     // Check for error codes first
     if (weight.startsWith("ERR_")) {
         const errorMessage = ErrorDescriptions[weight] || `Error de lectura: ${weight}`;
-        state.lastError = weight; // Store the error code
-        updateConnectionUI(state.isConnected); // Update UI to show error
-        addLog('ERROR', `⚠️ ${errorMessage}`, 'error');
-        showToast(errorMessage, 'error');
+        // Only log and toast if this is a new error to prevent spam
+        if (state.lastError !== weight) {
+            state.lastError = weight;
+            updateConnectionUI(state.isConnected);
+            addLog('ERROR', `⚠️ ${errorMessage}`, 'error');
+            showToast(errorMessage, 'error');
+        } else {
+            // Same error, just update UI
+            updateConnectionUI(state.isConnected);
+        }
         return;
     }
 

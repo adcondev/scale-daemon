@@ -14,11 +14,7 @@
         "tipo": {
           "type": "string",
           "enum": [
-            "config",
-            "logConfig",
-            "logFlush",
-            "logTail",
-            "logStatus"
+            "config"
           ]
         }
       },
