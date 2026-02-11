@@ -13,7 +13,6 @@ import (
 func main() {
 	// Create and run service
 	service := daemon.New(config.BuildEnvironment, config.BuildDate, config.BuildTime)
-
 	if err := svc.Run(service, syscall.SIGINT, syscall.SIGTERM); err != nil {
 		log.Fatal(err)
 	}
