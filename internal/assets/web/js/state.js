@@ -10,6 +10,7 @@ const state = {
     startTime: Date.now(),
     lastWeightTime: null,
     pollTimer: null,
+    lastError: null, // Track the last error code received
     config: {
         puerto: 'COM3',
         marca: 'Rhino BAR 8RS',

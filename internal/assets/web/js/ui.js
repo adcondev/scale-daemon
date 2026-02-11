@@ -3,8 +3,18 @@
    ============================================================== */
 
 function updateConnectionUI(connected) {
-    el.connStatus.className = 'conn-badge ' + (connected ? 'online' : 'offline');
-    el.connStatus.innerHTML = `<span class="conn-dot"></span><span>${connected ? 'En Línea' : 'Desconectado'}</span>`;
+    // If there's an active error, show error state regardless of connection
+    if (state.lastError) {
+        const errorMsg = ErrorDescriptions[state.lastError] || state.lastError;
+        el.connStatus.className = 'conn-badge error';
+        el.connStatus.innerHTML = `<span class="conn-dot"></span><span>Error: ${state.lastError}</span>`;
+        el.connStatus.title = errorMsg;
+    } else {
+        // Normal connection status
+        el.connStatus.className = 'conn-badge ' + (connected ? 'online' : 'offline');
+        el.connStatus.innerHTML = `<span class="conn-dot"></span><span>${connected ? 'En Línea' : 'Desconectado'}</span>`;
+        el.connStatus.title = connected ? 'Conectado al servicio' : 'Desconectado';
+    }
 
     if (el.btnApplyConfig) {
         el.btnApplyConfig.disabled = !connected;

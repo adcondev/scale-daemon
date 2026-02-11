@@ -6,6 +6,13 @@
    - NO ping/pong/status via WebSocket (use HTTP endpoints)
    ============================================================== */
 
+const ErrorDescriptions = {
+    "ERR_EOF": "EOF recibido. Posible desconexión.",
+    "ERR_TIMEOUT": "Timeout de lectura.",
+    "ERR_READ": "Error de lectura.",
+    "ERR_SCALE_CONN": "No se pudo conectar al puerto serial.",
+};
+
 function connectWebSocket() {
     addLog('INFO', `Conectando a ${CONFIG.WS_URL}...`);
     state.socket = new WebSocket(CONFIG.WS_URL);
@@ -74,7 +81,25 @@ function handleAmbienteMessage(msg) {
 // Handle weight readings (format: raw string "12.50")
 function handleWeightReading(peso) {
     const weight = String(peso).trim();
+
+    // Check for error codes first
+    if (weight.startsWith("ERR_")) {
+        const errorMessage = ErrorDescriptions[weight] || `Error de lectura: ${weight}`;
+        state.lastError = weight; // Store the error code
+        updateConnectionUI(state.isConnected); // Update UI to show error
+        addLog('ERROR', `⚠️ ${errorMessage}`, 'error');
+        showToast(errorMessage, 'error');
+        return;
+    }
+
+    // Handle normal weight readings
     if (weight && weight !== '') {
+        // Clear any previous error on successful weight reading
+        if (state.lastError) {
+            state.lastError = null;
+            updateConnectionUI(state.isConnected); // Update UI to clear error
+        }
+
         updateWeightDisplay(weight);
         addLog('WEIGHT', `⚖️ ${weight} kg`, 'success');
         state.lastWeight = weight;
