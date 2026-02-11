@@ -22,15 +22,17 @@ const (
 )
 
 const (
-	ErrEOF     = "ERR_EOF"
-	ErrTimeout = "ERR_TIMEOUT"
-	ErrRead    = "ERR_READ"
+	ErrEOF        = "ERR_EOF"
+	ErrTimeout    = "ERR_TIMEOUT"
+	ErrRead       = "ERR_READ"
+	ErrConnection = "ERR_SCALE_CONN"
 )
 
 var ErrorDescriptions = map[string]string{
-	ErrEOF:     "EOF recibido. Posible desconexión.",
-	ErrTimeout: "Timeout de lectura.",
-	ErrRead:    "Error de lectura.",
+	ErrEOF:        "EOF recibido. Posible desconexión.",
+	ErrTimeout:    "Timeout de lectura.",
+	ErrRead:       "Error de lectura.",
+	ErrConnection: "No se pudo conectar al puerto serial.",
 }
 
 // BrandCommands maps scale brands to their weight request commands
@@ -144,6 +146,7 @@ func (r *Reader) readCycle(ctx context.Context) {
 	if err := r.connect(conf.Puerto); err != nil {
 		log.Printf("[X] No se pudo abrir el puerto serial %s: %v. Reintentando en %s...",
 			conf.Puerto, err, RetryDelay)
+		r.sendError(ErrConnection) // Notify clients of connection failure
 		time.Sleep(RetryDelay)
 		return
 	}
