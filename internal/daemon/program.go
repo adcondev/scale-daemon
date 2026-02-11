@@ -45,18 +45,17 @@ type Service struct {
 }
 
 // New creates a new service instance
-func New(buildEnv, buildDate, buildTime, logServiceName string) *Service {
+func New(buildEnv, buildDate, buildTime string) *Service {
 	return &Service{
 		BuildEnvironment: buildEnv,
 		BuildDate:        buildDate,
 		BuildTime:        buildTime,
-		LogServiceName:   logServiceName,
 		broadcast:        make(chan string, 100),
 	}
 }
 
 // Init implements svc.Service
-func (s *Service) Init(env svc.Environment) error {
+func (s *Service) Init(_ svc.Environment) error {
 	s.timeStart = time.Now()
 	s.env = config.GetEnvironment(s.BuildEnvironment)
 
@@ -68,7 +67,7 @@ func (s *Service) Init(env svc.Environment) error {
 
 	// Setup logging
 	defaultVerbose := s.BuildEnvironment == "test"
-	logMgr, err := logging.Setup(logServiceName, defaultVerbose)
+	logMgr, err := logging.Setup(s.env.ServiceName, defaultVerbose)
 	if err != nil {
 		return err
 	}

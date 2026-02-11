@@ -5,6 +5,13 @@ import (
 	"sync"
 )
 
+// Build variables (injected via ldflags)
+var (
+	BuildEnvironment = "local"
+	BuildDate        = "unknown"
+	BuildTime        = "unknown"
+)
+
 // Environment holds environment-specific settings
 type Environment struct {
 	Name        string

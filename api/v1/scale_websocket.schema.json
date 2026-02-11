@@ -1,0 +1,132 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/adcondev/scale-daemon/api/v1/websocket.schema.json",
+  "title": "Scale Daemon WebSocket Protocol",
+  "description": "Schema for mixed-mode WebSocket protocol (JSON Objects for control, JSON Strings for data)",
+  "definitions": {
+    "ClientMessage": {
+      "type": "object",
+      "description": "Messages sent from client to server (Strictly JSON Objects)",
+      "required": [
+        "tipo"
+      ],
+      "properties": {
+        "tipo": {
+          "type": "string",
+          "enum": [
+            "config"
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "$ref": "#/definitions/ConfigMessage"
+        }
+      ]
+    },
+    "ServerMessage": {
+      "description": "Messages sent from server to client. Can be an Object (Control) or a String (Weight/Error).",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/EnvironmentInfo"
+        },
+        {
+          "$ref": "#/definitions/WeightReading"
+        },
+        {
+          "$ref": "#/definitions/ErrorCode"
+        }
+      ]
+    },
+    "ConfigMessage": {
+      "type": "object",
+      "required": [
+        "tipo",
+        "puerto",
+        "marca",
+        "modoPrueba"
+      ],
+      "properties": {
+        "tipo": {
+          "const": "config"
+        },
+        "puerto": {
+          "type": "string",
+          "examples": [
+            "COM3",
+            "/dev/ttyUSB0"
+          ]
+        },
+        "marca": {
+          "type": "string",
+          "examples": [
+            "Rhino BAR 8RS"
+          ]
+        },
+        "modoPrueba": {
+          "type": "boolean"
+        }
+      }
+    },
+    "EnvironmentInfo": {
+      "type": "object",
+      "required": [
+        "tipo",
+        "ambiente",
+        "version",
+        "config"
+      ],
+      "properties": {
+        "tipo": {
+          "const": "ambiente"
+        },
+        "ambiente": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "config": {
+          "type": "object",
+          "properties": {
+            "puerto": {
+              "type": "string"
+            },
+            "marca": {
+              "type": "string"
+            },
+            "modoPrueba": {
+              "type": "boolean"
+            },
+            "ambiente": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "WeightReading": {
+      "type": "string",
+      "description": "Raw weight reading sent as a JSON string literal.",
+      "pattern": "^\\d+(\\.\\d+)?$",
+      "examples": [
+        "12.50",
+        "0.00",
+        "5.45"
+      ]
+    },
+    "ErrorCode": {
+      "type": "string",
+      "description": "Error code broadcast as a JSON string literal.",
+      "enum": [
+        "ERR_SCALE_CONN",
+        "ERR_EOF",
+        "ERR_TIMEOUT",
+        "ERR_READ"
+      ],
+      "examples": [
+        "ERR_SCALE_CONN"
+      ]
+    }
+  }
+}

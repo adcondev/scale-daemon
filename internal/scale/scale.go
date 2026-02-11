@@ -21,6 +21,20 @@ const (
 	BaudRate          = 9600
 )
 
+const (
+	ErrEOF        = "ERR_EOF"
+	ErrTimeout    = "ERR_TIMEOUT"
+	ErrRead       = "ERR_READ"
+	ErrConnection = "ERR_SCALE_CONN"
+)
+
+var ErrorDescriptions = map[string]string{
+	ErrEOF:        "EOF recibido. Posible desconexión.",
+	ErrTimeout:    "Timeout de lectura.",
+	ErrRead:       "Error de lectura.",
+	ErrConnection: "No se pudo conectar al puerto serial.",
+}
+
 // BrandCommands maps scale brands to their weight request commands
 var BrandCommands = map[string]string{
 	"rhino":         "P",
@@ -132,6 +146,7 @@ func (r *Reader) readCycle(ctx context.Context) {
 	if err := r.connect(conf.Puerto); err != nil {
 		log.Printf("[X] No se pudo abrir el puerto serial %s: %v. Reintentando en %s...",
 			conf.Puerto, err, RetryDelay)
+		r.sendError(ErrConnection) // Notify clients of connection failure
 		time.Sleep(RetryDelay)
 		return
 	}
@@ -180,12 +195,15 @@ func (r *Reader) readCycle(ctx context.Context) {
 
 		if err != nil {
 			if err == io.EOF {
-				log.Printf("[!] EOF recibido al leer del puerto %s. Posible desconexión.", conf.Puerto)
+				log.Printf("[!] %s: %s", ErrorDescriptions[ErrEOF], conf.Puerto)
+				r.sendError(ErrEOF)
 			} else if strings.Contains(err.Error(), "timeout") {
-				log.Printf("[~] Timeout de lectura en puerto %s. Reintentando...", conf.Puerto)
+				log.Printf("[~] %s: %s. Reintentando...", ErrorDescriptions[ErrTimeout], conf.Puerto)
+				r.sendError(ErrTimeout)
 				continue
 			} else {
-				log.Printf("[!] Error de lectura en puerto %s: %v", conf.Puerto, err)
+				log.Printf("[!] %s: %s - %v", ErrorDescriptions[ErrRead], conf.Puerto, err)
+				r.sendError(ErrRead)
 				r.closePort()
 				time.Sleep(RetryDelay)
 				break
@@ -210,6 +228,14 @@ func (r *Reader) readCycle(ctx context.Context) {
 
 	log.Printf("[~] Esperando %s antes de intentar reconectar al puerto serial...", RetryDelay)
 	time.Sleep(RetryDelay)
+}
+
+func (r *Reader) sendError(code string) {
+	select {
+	case r.broadcast <- code:
+	default:
+		// Channel full, skip
+	}
 }
 
 func (r *Reader) connect(puerto string) error {

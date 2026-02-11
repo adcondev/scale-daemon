@@ -34,6 +34,12 @@
 - **User Experience (DX/UX):**
   - Developed a professional **Terminal User Interface (TUI)** for the installer, featuring animated spinners, progress bars, and a menu-driven workflow, significantly improving the deployment experience.
   - Implemented a **Simulation Mode** for development, allowing the service to generate fake weight data when no physical scale is connected.
+- **Full-Stack Error Visibility:**
+  - Solved the "Black Box" problem where connection errors were only visible in server logs. Implemented an Error
+    Broadcasting Pipeline where backend connectivity failures (like `ERR_SCALE_CONN`) are caught in Go, injected into
+    the WebSocket stream, and parsed by the JS frontend to trigger visual alerts (Toasts/Logs).
+  - This ensures that end-users (retail staff) receive immediate feedback if a scale is unplugged or misconfigured,
+    without needing IT support to check the service logs.
 
 ## Skills Gained/Reinforced
 - **Go Concurrency Patterns:** usage of `sync.Mutex`, `channels`, `context`, and `sync.WaitGroup` for graceful shutdowns.
@@ -41,3 +47,7 @@
 - **Windows API:** Interacting with the Windows Service Control Manager (SCM).
 - **TUI Development:** Building modern CLI tools with the Bubbletea framework.
 - **Architecture Design:** Decoupling hardware reading (Producer) from network broadcasting (Consumer).
+- **Error Propagation Patterns:** Treating errors as first-class domain events that are broadcast to consumers just like
+  data, rather than just logging them server-side.
+- **Resilient UX Design:** Building frontend interfaces that react gracefully to backend state changes (e.g., visual "
+  System Offline" states vs. specific "Port Not Found" errors).

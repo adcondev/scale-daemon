@@ -68,6 +68,8 @@ sequenceDiagram
 * 🧪 **Modo Simulación Integrado**: Generación de pesos aleatorios con fluctuación realista para desarrollo sin hardware físico.
 * 🛠️ **Instalador Profesional**: TUI (Text User Interface) para gestionar el ciclo de vida del servicio (Instalar, Iniciar, Detener).
 * 📊 **Dashboard de Diagnóstico**: Interfaz web embebida para monitorear el peso y probar la configuración visualmente.
+* 🚨 **Diagnóstico en Tiempo Real**: Notificación inmediata de errores de conexión (puerto no encontrado, desconexión
+  física) directamente en el Dashboard, eliminando la necesidad de revisar logs del servidor.
 
 ---
 
@@ -107,16 +109,28 @@ El peso se envía como un string simple o JSON dependiendo de la estabilidad de 
 
 ---
 
+### Códigos de Error
+
+Además del peso, el servidor puede enviar códigos de error críticos para que el cliente notifique al usuario
+visualmente.
+
+| Código         | Descripción       | Causa Común                                                               |
+|----------------|-------------------|---------------------------------------------------------------------------|
+| ERR_SCALE_CONN | Error de Conexión | El puerto COM no existe o está ocupado por otro proceso.                  |
+| ERR_EOF        | Desconexión (EOF) | El cable de la báscula fue desconectado físicamente durante la operación. |
+| ERR_TIMEOUT    | Tiempo de Espera  | La báscula está conectada pero no responde a los comandos (5s).           |
+| ERR_READ       | Error de Lectura  | Ruido en la línea o fallo del driver serial.                              |
+
 ## ⚙️ Configuración y Build
 
 El proyecto utiliza un `Taskfile` para gestionar compilaciones inyectando variables en tiempo de enlace (`ldflags`).
 
-| Tarea | Descripción |
-| --- | --- |
-| `task build:local` | Compila instalador para entorno de pruebas (localhost). |
-| `task build:remote` | Compila instalador para producción (0.0.0.0). |
-| `task build:console` | Genera ejecutables de consola para debugging rápido. |
-| `task clean` | Limpia binarios y archivos temporales. |
+| Tarea                | Descripción                                             |
+|----------------------|---------------------------------------------------------|
+| `task build:local`   | Compila instalador para entorno de pruebas (localhost). |
+| `task build:remote`  | Compila instalador para producción (0.0.0.0).           |
+| `task build:console` | Genera ejecutables de consola para debugging rápido.    |
+| `task clean`         | Limpia binarios y archivos temporales.                  |
 
 ### Inyección de Metadatos
 
