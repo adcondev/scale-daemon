@@ -23,18 +23,27 @@ jobs:
           echo ""
           
           echo "### Open PRs from Dependabot:"
-          gh pr list --author "app/dependabot" --json number,title,labels,createdAt \
-            --jq '.[] | "- PR #\(.number): \(.title) - Labels: \(.labels[].name // "none") - Created: \(.createdAt)"' || echo "No Dependabot PRs found"
+          if ! gh pr list --author "app/dependabot" --json number,title,labels,createdAt \
+            --jq '.[] | "- PR #\(.number): \(.title) - Labels: \(.labels[].name // "none") - Created: \(.createdAt)"'; then
+            echo "Error: Failed to fetch Dependabot PRs" >&2
+            exit 1
+          fi
           
           echo ""
           echo "### PRs needing review:"
-          gh pr list --label "needs-review" --json number,title,author \
-            --jq '.[] | "- PR #\(.number): \(.title) by \(.author.login)"' || echo "No PRs need review"
+          if ! gh pr list --label "needs-review" --json number,title,author \
+            --jq '.[] | "- PR #\(.number): \(.title) by \(.author.login)"'; then
+            echo "Error: Failed to fetch PRs needing review" >&2
+            exit 1
+          fi
           
           echo ""
           echo "### Auto-merge enabled PRs:"
-          gh pr list --label "auto-merge" --json number,title,mergeable \
-            --jq '.[] | "- PR #\(.number): \(.title) - Mergeable: \(.mergeable)"' || echo "No auto-merge PRs"
+          if ! gh pr list --label "auto-merge" --json number,title,mergeable \
+            --jq '.[] | "- PR #\(.number): \(.title) - Mergeable: \(.mergeable)"'; then
+            echo "Error: Failed to fetch auto-merge PRs" >&2
+            exit 1
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -43,10 +52,18 @@ jobs:
           NEEDS_REVIEW_COUNT=$(gh pr list --label "needs-review" --json number --jq '. | length')
           
           if [ "$NEEDS_REVIEW_COUNT" -gt 0 ]; then
-            gh issue create \
+            if ! gh issue create \
               --title "⚠️ $NEEDS_REVIEW_COUNT PRs need manual review" \
               --body "There are $NEEDS_REVIEW_COUNT pull requests waiting for manual review. Please check PRs with the 'needs-review' label." \
-              --label "maintenance" || echo "Issue might already exist"
+              --label "maintenance"; then
+              # Check if it failed due to duplicate
+              if gh issue list --label "maintenance" --search "PRs need manual review" --json number --jq '. | length' | grep -q "^[1-9]"; then
+                echo "Issue already exists, skipping creation"
+              else
+                echo "Error: Failed to create issue" >&2
+                exit 1
+              fi
+            fi
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
