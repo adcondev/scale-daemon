@@ -1,3 +1,4 @@
+// Package main implements the main entry point for the scale daemon application.
 package main
 
 import (

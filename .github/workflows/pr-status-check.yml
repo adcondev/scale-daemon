@@ -1,0 +1,75 @@
+name: PR Status Dashboard
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Monday at 9 AM UTC
+  workflow_dispatch:
+
+jobs:
+  check-prs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Check Dependabot PRs
+        run: |
+          echo "## 📊 Dependabot PRs Status Report" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Generated: $(date)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "" | tee -a "$GITHUB_STEP_SUMMARY"
+          
+          echo "### Open PRs from Dependabot:" | tee -a "$GITHUB_STEP_SUMMARY"
+          DEPENDABOT_PRS=$(gh pr list --author "app/dependabot" --json number,title,labels,createdAt \
+            --jq '.[] | "- PR #\(.number): \(.title) - Labels: \([.labels[].name] | join(", ") // "none") - Created: \(.createdAt)"')
+          if [ -z "$DEPENDABOT_PRS" ]; then
+            echo "No Dependabot PRs found" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "$DEPENDABOT_PRS" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          
+          echo "" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "### PRs needing review:" | tee -a "$GITHUB_STEP_SUMMARY"
+          REVIEW_PRS=$(gh pr list --label "needs-review" --json number,title,author \
+            --jq '.[] | "- PR #\(.number): \(.title) by \(.author.login)"')
+          if [ -z "$REVIEW_PRS" ]; then
+            echo "No PRs need review" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "$REVIEW_PRS" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          
+          echo "" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "### Auto-merge enabled PRs:" | tee -a "$GITHUB_STEP_SUMMARY"
+          AUTOMERGE_PRS=$(gh pr list --label "auto-merge" --json number,title,mergeable \
+            --jq '.[] | "- PR #\(.number): \(.title) - Mergeable: \(.mergeable)"')
+          if [ -z "$AUTOMERGE_PRS" ]; then
+            echo "No auto-merge PRs" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "$AUTOMERGE_PRS" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create issue if needed
+        continue-on-error: true
+        run: |
+          NEEDS_REVIEW_COUNT=$(gh pr list --label "needs-review" --json number --jq '. | length')
+          
+          if [ "$NEEDS_REVIEW_COUNT" -gt 0 ]; then
+            # Check for existing open maintenance issues about PR reviews
+            EXISTING=$(gh issue list --label "maintenance" --state open --json title --jq '.[] | select(.title | contains("PRs need manual review")) | .title' | wc -l)
+            if [ "$EXISTING" -eq 0 ]; then
+              gh issue create \
+                --title "⚠️ PRs need manual review" \
+                --body "There are currently $NEEDS_REVIEW_COUNT pull requests waiting for manual review. Please check PRs with the 'needs-review' label." \
+                --label "maintenance"
+            else
+              echo "Maintenance issue already exists, skipping creation"
+            fi
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
