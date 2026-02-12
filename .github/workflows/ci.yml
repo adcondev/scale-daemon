@@ -70,23 +70,11 @@ jobs:
         run: |
           git checkout ${{ github.event.pull_request.base.sha }}
           go test -bench=. -benchmem -run=^$ ./... > /tmp/base-benchmark.txt 2>&1
-          if [ $? -ne 0 ] && ! grep -q "^Benchmark" /tmp/base-benchmark.txt; then
-            echo "Base branch: no benchmarks or compilation failed" > /tmp/base-benchmark.txt
-          fi
 
       - name: Run benchmarks (current)
         run: |
           git checkout ${{ github.event.pull_request.head.sha }}
-          if ! go test -bench=. -benchmem -run=^$ ./... > /tmp/current-benchmark.txt 2>&1; then
-            # Check if it's just missing benchmarks or an actual error
-            if grep -q "^Benchmark" /tmp/current-benchmark.txt; then
-              # Has benchmarks but failed - this is an error
-              echo "❌ Current branch benchmark execution failed" >&2
-              cat /tmp/current-benchmark.txt >&2
-              exit 1
-            fi
-            # No benchmarks found is OK, continue
-          fi
+          go test -bench=. -benchmem -run=^$ ./... > /tmp/current-benchmark.txt 2>&1
 
       - name: Compare benchmarks
         run: |
