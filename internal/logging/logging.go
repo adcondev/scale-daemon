@@ -1,3 +1,4 @@
+// Package logging manages log file creation, rotation, and filtering for non-critical messages when verbose mode is off.
 package logging
 
 import (
@@ -76,7 +77,7 @@ func Setup(serviceName string, defaultVerbose bool) (*Manager, error) {
 	mgr.FilePath = filepath.Join(logDir, serviceName+".log")
 
 	// Try to create log directory
-	if err := os.MkdirAll(logDir, 0755); err != nil {
+	if err := os.MkdirAll(logDir, 0750); err != nil {
 		// Permission denied - fallback to stdout (console mode)
 		log.SetOutput(os.Stdout)
 		mgr.FilePath = ""
@@ -90,7 +91,7 @@ func Setup(serviceName string, defaultVerbose bool) (*Manager, error) {
 	}
 
 	// Open log file
-	f, err := os.OpenFile(mgr.FilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	f, err := os.OpenFile(mgr.FilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 	if err != nil {
 		// Fallback to stdout
 		log.SetOutput(os.Stdout)
@@ -148,7 +149,7 @@ func (m *Manager) Flush() error {
 	}
 
 	// Reopen file
-	f, err := os.OpenFile(m.FilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	f, err := os.OpenFile(m.FilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 	if err != nil {
 		log.SetOutput(os.Stdout)
 		log.Printf("[i] Logging to stdout (cannot open %s: %v)", m.FilePath, err)
