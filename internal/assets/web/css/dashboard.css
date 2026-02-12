@@ -139,7 +139,8 @@ header {
     box-shadow: 0 0 20px rgba(16, 185, 129, 0.2);
 }
 
-.conn-badge.offline {
+.conn-badge.offline,
+.conn-badge.error {
     background: var(--c-error-bg);
     color: var(--c-error);
     border: 1px solid var(--c-error);

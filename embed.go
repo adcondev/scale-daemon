@@ -1,8 +1,8 @@
+// Package embedded provides access to embedded static web assets.
 package embedded
 
 import (
 	"embed"
-	_ "embed"
 )
 
 // WebFiles contains the static web assets (HTML, CSS, JS).
