@@ -1,7 +1,9 @@
+// Package daemon implements the main service logic, including lifecycle management and coordination of components like the scale reader and WebSocket server.
 package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -22,11 +24,7 @@ type Service struct {
 	BuildEnvironment string
 	BuildDate        string
 	BuildTime        string
-	// LogServiceName is injected via ldflags during build and used for log directory naming.
-	// It takes precedence over the environment config's ServiceName for log directory paths.
-	// This is distinct from the Windows SCM service name and matches the Taskfile SVC_LOG_NAME_* vars.
-	LogServiceName string
-	timeStart      time.Time
+	timeStart        time.Time
 
 	// Components
 	env         config.Environment
@@ -58,12 +56,6 @@ func New(buildEnv, buildDate, buildTime string) *Service {
 func (s *Service) Init(_ svc.Environment) error {
 	s.timeStart = time.Now()
 	s.env = config.GetEnvironment(s.BuildEnvironment)
-
-	// Use injected LogServiceName if provided, otherwise fall back to environment config
-	logServiceName := s.LogServiceName
-	if logServiceName == "" {
-		logServiceName = s.env.ServiceName
-	}
 
 	// Setup logging
 	defaultVerbose := s.BuildEnvironment == "test"
@@ -133,7 +125,7 @@ func (s *Service) run() {
 		if err := s.srv.ListenAndServe(); err != nil {
 			// http.ErrServerClosed is expected during graceful shutdown.
 			// Stop() closes s.quit after Shutdown() completes, avoiding double-close.
-			if err != http.ErrServerClosed {
+			if !errors.Is(err, http.ErrServerClosed) {
 				log.Printf("[X] Error al iniciar servidor: %v", err)
 				// Cancel context to stop broadcaster and reader goroutines
 				s.cancel()
