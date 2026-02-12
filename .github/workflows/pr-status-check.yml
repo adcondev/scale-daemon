@@ -24,7 +24,7 @@ jobs:
           
           echo "### Open PRs from Dependabot:"
           DEPENDABOT_PRS=$(gh pr list --author "app/dependabot" --json number,title,labels,createdAt \
-            --jq '.[] | "- PR #\(.number): \(.title) - Labels: \(.labels[].name // "none") - Created: \(.createdAt)"')
+            --jq '.[] | "- PR #\(.number): \(.title) - Labels: \([.labels[].name] | join(", ") // "none") - Created: \(.createdAt)"')
           if [ -z "$DEPENDABOT_PRS" ]; then
             echo "No Dependabot PRs found"
           else
