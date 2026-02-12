@@ -23,18 +23,33 @@ jobs:
           echo ""
           
           echo "### Open PRs from Dependabot:"
-          gh pr list --author "app/dependabot" --json number,title,labels,createdAt \
-            --jq '.[] | "- PR #\(.number): \(.title) - Labels: \(.labels[].name // "none") - Created: \(.createdAt)"' || true
+          DEPENDABOT_PRS=$(gh pr list --author "app/dependabot" --json number,title,labels,createdAt \
+            --jq '.[] | "- PR #\(.number): \(.title) - Labels: \(.labels[].name // "none") - Created: \(.createdAt)"')
+          if [ -z "$DEPENDABOT_PRS" ]; then
+            echo "No Dependabot PRs found"
+          else
+            echo "$DEPENDABOT_PRS"
+          fi
           
           echo ""
           echo "### PRs needing review:"
-          gh pr list --label "needs-review" --json number,title,author \
-            --jq '.[] | "- PR #\(.number): \(.title) by \(.author.login)"' || true
+          REVIEW_PRS=$(gh pr list --label "needs-review" --json number,title,author \
+            --jq '.[] | "- PR #\(.number): \(.title) by \(.author.login)"')
+          if [ -z "$REVIEW_PRS" ]; then
+            echo "No PRs need review"
+          else
+            echo "$REVIEW_PRS"
+          fi
           
           echo ""
           echo "### Auto-merge enabled PRs:"
-          gh pr list --label "auto-merge" --json number,title,mergeable \
-            --jq '.[] | "- PR #\(.number): \(.title) - Mergeable: \(.mergeable)"' || true
+          AUTOMERGE_PRS=$(gh pr list --label "auto-merge" --json number,title,mergeable \
+            --jq '.[] | "- PR #\(.number): \(.title) - Mergeable: \(.mergeable)"')
+          if [ -z "$AUTOMERGE_PRS" ]; then
+            echo "No auto-merge PRs"
+          else
+            echo "$AUTOMERGE_PRS"
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
