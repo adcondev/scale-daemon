@@ -1,3 +1,4 @@
+// Package config provides configuration management for the scale service, including environment-specific settings and runtime configuration updates.
 package config
 
 import (
