@@ -96,17 +96,17 @@ func (s *Service) Start() error {
 
 	// Create HTTP/WebSocket server
 	buildInfo := fmt.Sprintf("%s %s", s.BuildDate, s.BuildTime)
-	s.srv = server.NewServer(
-		s.cfg,
-		s.env,
-		s.broadcaster,
-		s.logMgr,
-		buildInfo,
-		s.onConfigChange,
-		s.BuildDate,
-		s.BuildTime,
-		s.timeStart,
-	)
+	s.srv = server.NewServer(server.ServerConfig{
+		Config:         s.cfg,
+		Env:            s.env,
+		Broadcaster:    s.broadcaster,
+		LogMgr:         s.logMgr,
+		BuildInfo:      buildInfo,
+		OnConfigChange: s.onConfigChange,
+		BuildDate:      s.BuildDate,
+		BuildTime:      s.BuildTime,
+		StartTime:      s.timeStart,
+	})
 
 	// Start components
 	s.wg.Add(1)

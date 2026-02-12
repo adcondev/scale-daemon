@@ -36,28 +36,31 @@ type Server struct {
 	httpServer     *http.Server
 }
 
+// ServerConfig holds the configuration for creating a new Server
+type ServerConfig struct {
+	Config         *config.Config
+	Env            config.Environment
+	Broadcaster    *Broadcaster
+	LogMgr         *logging.Manager
+	BuildInfo      string
+	OnConfigChange func()
+	BuildDate      string
+	BuildTime      string
+	StartTime      time.Time
+}
+
 // NewServer creates a new server instance
-func NewServer(
-	cfg *config.Config,
-	env config.Environment,
-	broadcaster *Broadcaster,
-	logMgr *logging.Manager,
-	buildInfo string,
-	onConfigChange func(),
-	buildDate string,
-	buildTime string,
-	startTime time.Time,
-) *Server {
+func NewServer(opts ServerConfig) *Server {
 	s := &Server{
-		config:         cfg,
-		env:            env,
-		broadcaster:    broadcaster,
-		logMgr:         logMgr,
-		buildInfo:      buildInfo,
-		onConfigChange: onConfigChange,
-		buildDate:      buildDate,
-		buildTime:      buildTime,
-		startTime:      startTime,
+		config:         opts.Config,
+		env:            opts.Env,
+		broadcaster:    opts.Broadcaster,
+		logMgr:         opts.LogMgr,
+		buildInfo:      opts.BuildInfo,
+		onConfigChange: opts.OnConfigChange,
+		buildDate:      opts.BuildDate,
+		buildTime:      opts.BuildTime,
+		startTime:      opts.StartTime,
 	}
 
 	// Setup HTTP handlers
@@ -76,7 +79,7 @@ func NewServer(
 
 	// This ensures s.httpServer is NEVER nil once NewServer returns
 	s.httpServer = &http.Server{
-		Addr:    env.ListenAddr,
+		Addr:    opts.Env.ListenAddr,
 		Handler: mux,
 		// ALWAYS add timeouts to prevent Slowloris attacks
 		ReadTimeout:  15 * time.Second,
