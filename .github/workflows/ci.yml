@@ -70,18 +70,25 @@ jobs:
         run: |
           git checkout ${{ github.event.pull_request.base.sha }}
           go test -bench=. -benchmem -run=^$ ./... > /tmp/base-benchmark.txt 2>&1
+          if [ $? -ne 0 ] && ! grep -q "^Benchmark" /tmp/base-benchmark.txt; then
+            echo "Base branch: no benchmarks or compilation failed" > /tmp/base-benchmark.txt
+          fi
 
       - name: Run benchmarks (current)
         run: |
           git checkout ${{ github.event.pull_request.head.sha }}
-          go test -bench=. -benchmem -run=^$ ./... > /tmp/current-benchmark.txt 2>&1
+          if ! go test -bench=. -benchmem -run=^$ ./... > /tmp/current-benchmark.txt 2>&1; then
+            echo "❌ Current branch benchmark execution failed" >&2
+            cat /tmp/current-benchmark.txt >&2
+            exit 1
+          fi
 
       - name: Compare benchmarks
         run: |
-          cat > benchmark-comment.md << 'EOFMARKER'
+          cat > benchmark-comment.md << 'EOF'
           ## ⚡ Benchmark Results
           
-          EOFMARKER
+          EOF
           
           if grep -q "^Benchmark" /tmp/current-benchmark.txt; then
             echo "### 📊 Current Branch Results" >> benchmark-comment.md
