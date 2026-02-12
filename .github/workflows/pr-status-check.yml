@@ -56,8 +56,9 @@ jobs:
               --title "⚠️ $NEEDS_REVIEW_COUNT PRs need manual review" \
               --body "There are $NEEDS_REVIEW_COUNT pull requests waiting for manual review. Please check PRs with the 'needs-review' label." \
               --label "maintenance"; then
-              # Check if it failed due to duplicate
-              if gh issue list --label "maintenance" --search "PRs need manual review" --json number --jq '. | length' | grep -q "^[1-9]"; then
+              # Check if it failed due to duplicate by looking for existing issues with maintenance label
+              EXISTING=$(gh issue list --label "maintenance" --state open --json title --jq '.[] | select(.title | contains("PRs need manual review")) | .title' | wc -l)
+              if [ "$EXISTING" -gt 0 ]; then
                 echo "Issue already exists, skipping creation"
               else
                 echo "Error: Failed to create issue" >&2
