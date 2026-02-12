@@ -7,7 +7,7 @@ function updateConnectionUI(connected) {
     if (state.lastError) {
         const errorMsg = ErrorDescriptions[state.lastError] || state.lastError;
         el.connStatus.className = 'conn-badge error';
-        el.connStatus.innerHTML = `<span class="conn-dot"></span><span>Error: ${state.lastError}</span>`;
+        el.connStatus.innerHTML = `<span class="conn-dot"></span><span>${state.lastError}</span>`;
         el.connStatus.title = errorMsg;
     } else {
         // Normal connection status

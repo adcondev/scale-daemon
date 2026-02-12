@@ -1,0 +1,166 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+env:
+  GO_VERSION: '1.24.x'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: 🧪 Test and Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run tests with race detection
+        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: Generate coverage report
+        run: |
+          go tool cover -func=coverage.txt -o=coverage-summary.txt
+          echo "## 📊 Test Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -n 1 coverage-summary.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.txt
+          flags: unittests
+          name: codecov-ubuntu
+          fail_ci_if_error: false
+
+  benchmark:
+    name: ⚡ Performance Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run benchmarks (base)
+        continue-on-error: true
+        run: |
+          git clean -fdx
+          git checkout ${{ github.event.pull_request.base.sha }}
+          go test -bench=. -benchmem -run=^$ ./... > /tmp/base-benchmark.txt 2>&1
+
+      - name: Run benchmarks (current)
+        run: |
+          git clean -fdx
+          git checkout ${{ github.event.pull_request.head.sha }}
+          go test -bench=. -benchmem -run=^$ ./... > /tmp/current-benchmark.txt 2>&1
+
+      - name: Compare benchmarks
+        run: |
+          cat > benchmark-comment.md << 'EOF'
+          ## ⚡ Benchmark Results
+          
+          EOF
+          
+          if grep -q "^Benchmark" /tmp/current-benchmark.txt; then
+            echo "### 📊 Current Branch Results" >> benchmark-comment.md
+            echo '```' >> benchmark-comment.md
+            grep "^Benchmark" /tmp/current-benchmark.txt | head -20 >> benchmark-comment.md
+            echo '```' >> benchmark-comment.md
+            
+            if grep -q "^Benchmark" /tmp/base-benchmark.txt; then
+              echo "" >> benchmark-comment.md
+              echo "### 📊 Base Branch Results" >> benchmark-comment.md
+              echo '```' >> benchmark-comment.md
+              grep "^Benchmark" /tmp/base-benchmark.txt | head -20 >> benchmark-comment.md
+              echo '```' >> benchmark-comment.md
+              echo "" >> benchmark-comment.md
+              echo "💡 Use \`benchstat\` for detailed statistical comparison" >> benchmark-comment.md
+            fi
+          else
+            echo "⚠️ No benchmarks found in the current codebase." >> benchmark-comment.md
+            echo "" >> benchmark-comment.md
+            echo "To add benchmarks, create functions starting with \`Benchmark\` in \`*_test.go\` files." >> benchmark-comment.md
+          fi
+
+      - name: Post benchmark results to PR
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const comment = fs.readFileSync('benchmark-comment.md', 'utf8');
+            
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(c => 
+              c.user.type === 'Bot' && 
+              c.body.includes('⚡ Benchmark Results')
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
+
+      - name: Add to job summary
+        run: cat benchmark-comment.md >> $GITHUB_STEP_SUMMARY
+
+  lint:
+    name: 🔍 Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          skip-cache: false
+          args: --config=./.golangci.yml --timeout=5m
