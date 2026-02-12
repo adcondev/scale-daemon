@@ -3,6 +3,7 @@ name: PR Status Dashboard
 permissions:
   contents: read
   issues: write
+  pull-requests: read
 
 on:
   schedule:
@@ -18,37 +19,37 @@ jobs:
 
       - name: Check Dependabot PRs
         run: |
-          echo "## 📊 Dependabot PRs Status Report"
-          echo "Generated: $(date)"
-          echo ""
+          echo "## 📊 Dependabot PRs Status Report" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Generated: $(date)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "" | tee -a "$GITHUB_STEP_SUMMARY"
           
-          echo "### Open PRs from Dependabot:"
+          echo "### Open PRs from Dependabot:" | tee -a "$GITHUB_STEP_SUMMARY"
           DEPENDABOT_PRS=$(gh pr list --author "app/dependabot" --json number,title,labels,createdAt \
             --jq '.[] | "- PR #\(.number): \(.title) - Labels: \([.labels[].name] | join(", ") // "none") - Created: \(.createdAt)"')
           if [ -z "$DEPENDABOT_PRS" ]; then
-            echo "No Dependabot PRs found"
+            echo "No Dependabot PRs found" | tee -a "$GITHUB_STEP_SUMMARY"
           else
-            echo "$DEPENDABOT_PRS"
+            echo "$DEPENDABOT_PRS" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
           
-          echo ""
-          echo "### PRs needing review:"
+          echo "" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "### PRs needing review:" | tee -a "$GITHUB_STEP_SUMMARY"
           REVIEW_PRS=$(gh pr list --label "needs-review" --json number,title,author \
             --jq '.[] | "- PR #\(.number): \(.title) by \(.author.login)"')
           if [ -z "$REVIEW_PRS" ]; then
-            echo "No PRs need review"
+            echo "No PRs need review" | tee -a "$GITHUB_STEP_SUMMARY"
           else
-            echo "$REVIEW_PRS"
+            echo "$REVIEW_PRS" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
           
-          echo ""
-          echo "### Auto-merge enabled PRs:"
+          echo "" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "### Auto-merge enabled PRs:" | tee -a "$GITHUB_STEP_SUMMARY"
           AUTOMERGE_PRS=$(gh pr list --label "auto-merge" --json number,title,mergeable \
             --jq '.[] | "- PR #\(.number): \(.title) - Mergeable: \(.mergeable)"')
           if [ -z "$AUTOMERGE_PRS" ]; then
-            echo "No auto-merge PRs"
+            echo "No auto-merge PRs" | tee -a "$GITHUB_STEP_SUMMARY"
           else
-            echo "$AUTOMERGE_PRS"
+            echo "$AUTOMERGE_PRS" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

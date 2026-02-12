@@ -51,6 +51,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     permissions:
+      contents: read
+      issues: write
       pull-requests: write
 
     steps:
@@ -68,11 +70,13 @@ jobs:
       - name: Run benchmarks (base)
         continue-on-error: true
         run: |
+          git clean -fdx
           git checkout ${{ github.event.pull_request.base.sha }}
           go test -bench=. -benchmem -run=^$ ./... > /tmp/base-benchmark.txt 2>&1
 
       - name: Run benchmarks (current)
         run: |
+          git clean -fdx
           git checkout ${{ github.event.pull_request.head.sha }}
           go test -bench=. -benchmem -run=^$ ./... > /tmp/current-benchmark.txt 2>&1
 
