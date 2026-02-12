@@ -11,7 +11,6 @@ env:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   test:
@@ -62,12 +61,12 @@ jobs:
         continue-on-error: true
         run: |
           git checkout ${{ github.event.pull_request.base.sha }}
-          go test -bench=. -benchmem -run=^$ ./... > /tmp/base-benchmark.txt 2>&1 || echo "Base benchmarks failed or not found" > /tmp/base-benchmark.txt
+          go test -bench=. -benchmem -run=^$ ./... > /tmp/base-benchmark.txt 2>&1
 
       - name: Run benchmarks (current)
         run: |
           git checkout ${{ github.event.pull_request.head.sha }}
-          go test -bench=. -benchmem -run=^$ ./... > /tmp/current-benchmark.txt 2>&1 || echo "No benchmarks found" > /tmp/current-benchmark.txt
+          go test -bench=. -benchmem -run=^$ ./... > /tmp/current-benchmark.txt 2>&1
 
       - name: Compare benchmarks
         run: |
