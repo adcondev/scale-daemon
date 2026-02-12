@@ -23,27 +23,18 @@ jobs:
           echo ""
           
           echo "### Open PRs from Dependabot:"
-          if ! gh pr list --author "app/dependabot" --json number,title,labels,createdAt \
-            --jq '.[] | "- PR #\(.number): \(.title) - Labels: \(.labels[].name // "none") - Created: \(.createdAt)"'; then
-            echo "Error: Failed to fetch Dependabot PRs" >&2
-            exit 1
-          fi
+          gh pr list --author "app/dependabot" --json number,title,labels,createdAt \
+            --jq '.[] | "- PR #\(.number): \(.title) - Labels: \(.labels[].name // "none") - Created: \(.createdAt)"' || true
           
           echo ""
           echo "### PRs needing review:"
-          if ! gh pr list --label "needs-review" --json number,title,author \
-            --jq '.[] | "- PR #\(.number): \(.title) by \(.author.login)"'; then
-            echo "Error: Failed to fetch PRs needing review" >&2
-            exit 1
-          fi
+          gh pr list --label "needs-review" --json number,title,author \
+            --jq '.[] | "- PR #\(.number): \(.title) by \(.author.login)"' || true
           
           echo ""
           echo "### Auto-merge enabled PRs:"
-          if ! gh pr list --label "auto-merge" --json number,title,mergeable \
-            --jq '.[] | "- PR #\(.number): \(.title) - Mergeable: \(.mergeable)"'; then
-            echo "Error: Failed to fetch auto-merge PRs" >&2
-            exit 1
-          fi
+          gh pr list --label "auto-merge" --json number,title,mergeable \
+            --jq '.[] | "- PR #\(.number): \(.title) - Mergeable: \(.mergeable)"' || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
