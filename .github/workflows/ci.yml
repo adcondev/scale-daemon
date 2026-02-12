@@ -159,5 +159,4 @@ jobs:
         with:
           version: latest
           skip-cache: false
-          skip-pkg-cache: false
-          skip-build-cache: false
+          args: --config=./.golangci.yml --timeout=5m
