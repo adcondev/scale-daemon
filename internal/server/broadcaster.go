@@ -12,16 +12,18 @@ import (
 
 // Broadcaster fans out weight readings to all connected clients
 type Broadcaster struct {
-	clients   map[*websocket.Conn]bool
-	mu        sync.RWMutex
-	broadcast <-chan string
+	clients    map[*websocket.Conn]bool
+	clientList []*websocket.Conn
+	mu         sync.RWMutex
+	broadcast  <-chan string
 }
 
 // NewBroadcaster creates a broadcaster for the given channel
 func NewBroadcaster(broadcast <-chan string) *Broadcaster {
 	return &Broadcaster{
-		clients:   make(map[*websocket.Conn]bool),
-		broadcast: broadcast,
+		clients:    make(map[*websocket.Conn]bool),
+		clientList: make([]*websocket.Conn, 0),
+		broadcast:  broadcast,
 	}
 }
 
@@ -44,10 +46,7 @@ func (b *Broadcaster) Start(ctx context.Context) {
 // CONSTRAINT: Weight is sent as JSON string, NOT wrapped in object
 func (b *Broadcaster) broadcastWeight(peso string) {
 	b.mu.RLock()
-	clients := make([]*websocket.Conn, 0, len(b.clients))
-	for c := range b.clients {
-		clients = append(clients, c)
-	}
+	clients := b.clientList
 	b.mu.RUnlock()
 
 	for _, conn := range clients {
@@ -71,6 +70,7 @@ func (b *Broadcaster) removeAndCloseClient(conn *websocket.Conn) {
 	_, exists := b.clients[conn]
 	if exists {
 		delete(b.clients, conn)
+		b.rebuildClientList()
 	}
 	b.mu.Unlock()
 
@@ -86,6 +86,7 @@ func (b *Broadcaster) removeAndCloseClient(conn *websocket.Conn) {
 func (b *Broadcaster) AddClient(conn *websocket.Conn) {
 	b.mu.Lock()
 	b.clients[conn] = true
+	b.rebuildClientList()
 	b.mu.Unlock()
 }
 
@@ -93,7 +94,18 @@ func (b *Broadcaster) AddClient(conn *websocket.Conn) {
 func (b *Broadcaster) RemoveClient(conn *websocket.Conn) {
 	b.mu.Lock()
 	delete(b.clients, conn)
+	b.rebuildClientList()
 	b.mu.Unlock()
+}
+
+// rebuildClientList updates the cached slice of clients
+// Caller must hold b.mu Lock
+func (b *Broadcaster) rebuildClientList() {
+	list := make([]*websocket.Conn, 0, len(b.clients))
+	for c := range b.clients {
+		list = append(list, c)
+	}
+	b.clientList = list
 }
 
 // ClientCount returns the number of connected clients
