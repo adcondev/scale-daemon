@@ -2,7 +2,9 @@ package logging
 
 import (
 	"io"
+	"log"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -30,16 +32,27 @@ func RotateIfNeeded(path string) error {
 	}
 
 	content := strings.Join(lines, "\n") + "\n"
-	return os.WriteFile(path, []byte(content), 0666)
+	return os.WriteFile(path, []byte(content), 0600)
 }
 
 // ReadLastNLines reads the last n lines from a file efficiently
 func ReadLastNLines(path string, n int) []string {
-	file, err := os.Open(path)
+	baseDir := filepath.Dir(path)
+	relPath := filepath.Base(path)
+	securePath, err := secureFilepath(baseDir, relPath)
 	if err != nil {
 		return []string{}
 	}
-	defer file.Close()
+	file, err := os.Open(securePath) //nolint:gosec
+	if err != nil {
+		return []string{}
+	}
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			log.Printf("[!] Error al cerrar archivo: %v", err)
+		}
+	}(file)
 
 	stat, err := file.Stat()
 	if err != nil {
@@ -93,7 +106,7 @@ func Flush(path string) error {
 	if len(lines) > 0 {
 		content = strings.Join(lines, "\n") + "\n"
 	}
-	return os.WriteFile(path, []byte(content), 0666)
+	return os.WriteFile(path, []byte(content), 0600)
 }
 
 // GetFileSize returns the size of the log file in bytes

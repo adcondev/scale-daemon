@@ -1,7 +1,9 @@
+// Package scale implements the logic for reading weight data from a serial-connected scale.
 package scale
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -15,19 +17,29 @@ import (
 	"github.com/adcondev/scale-daemon/internal/config"
 )
 
+// Communication constants for the scale reader
 const (
-	RetryDelay        = 3 * time.Second
+	// RetryDelay is the delay between connection retry attempts.
+	RetryDelay = 3 * time.Second
+	// SerialReadTimeout is the timeout for serial port reads.
 	SerialReadTimeout = 5 * time.Second
-	BaudRate          = 9600
+	// BaudRate is the baud rate for serial communication.
+	BaudRate = 9600
 )
 
+// Error codes for scale communication failures
 const (
-	ErrEOF        = "ERR_EOF"
-	ErrTimeout    = "ERR_TIMEOUT"
-	ErrRead       = "ERR_READ"
+	// ErrEOF is the error code for end-of-file received.
+	ErrEOF = "ERR_EOF"
+	// ErrTimeout is the error code for read timeout.
+	ErrTimeout = "ERR_TIMEOUT"
+	// ErrRead is the error code for read error.
+	ErrRead = "ERR_READ"
+	// ErrConnection is the error code for connection failure.
 	ErrConnection = "ERR_SCALE_CONN"
 )
 
+// ErrorDescriptions maps error codes to human-readable descriptions
 var ErrorDescriptions = map[string]string{
 	ErrEOF:        "EOF recibido. Posible desconexión.",
 	ErrTimeout:    "Timeout de lectura.",
@@ -53,12 +65,12 @@ func GetCommand(brand string) string {
 // GenerateSimulatedWeights creates a sequence of realistic weight readings
 // Returns 5 fluctuating values followed by a stable reading
 func GenerateSimulatedWeights() []float64 {
-	base := rand.Float64()*29 + 1 // 1.0 to 30.0
+	base := rand.Float64()*29 + 1 //nolint:gosec
 	var weights []float64
 
 	// 5 readings with small fluctuation
 	for i := 0; i < 5; i++ {
-		variation := base + rand.Float64()*0.1 - 0.05
+		variation := base + rand.Float64()*0.1 - 0.05 //nolint:gosec
 		weights = append(weights, float64(int(variation*100))/100)
 	}
 
@@ -194,19 +206,19 @@ func (r *Reader) readCycle(ctx context.Context) {
 		r.mu.Unlock()
 
 		if err != nil {
-			if err == io.EOF {
+			switch {
+			case errors.Is(err, io.EOF):
 				log.Printf("[!] %s: %s", ErrorDescriptions[ErrEOF], conf.Puerto)
 				r.sendError(ErrEOF)
-			} else if strings.Contains(err.Error(), "timeout") {
+			case strings.Contains(err.Error(), "timeout"):
 				log.Printf("[~] %s: %s. Reintentando...", ErrorDescriptions[ErrTimeout], conf.Puerto)
 				r.sendError(ErrTimeout)
 				continue
-			} else {
+			default:
 				log.Printf("[!] %s: %s - %v", ErrorDescriptions[ErrRead], conf.Puerto, err)
 				r.sendError(ErrRead)
 				r.closePort()
 				time.Sleep(RetryDelay)
-				break
 			}
 			continue
 		}

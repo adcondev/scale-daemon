@@ -1,3 +1,4 @@
+// Package server implements the HTTP and WebSocket server for the scale daemon.
 package server
 
 import (
@@ -11,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"nhooyr.io/websocket"
-	"nhooyr.io/websocket/wsjson"
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 
 	"github.com/adcondev/scale-daemon/internal/config"
 	"github.com/adcondev/scale-daemon/internal/logging"
@@ -156,11 +157,12 @@ func (s *Server) listenForMessages(ctx context.Context, c *websocket.Conn) {
 		err := wsjson.Read(ctx, c, &mensaje)
 
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
+			switch {
+			case errors.Is(err, context.Canceled):
 				log.Println("[i] Contexto del cliente cancelado")
-			} else if websocket.CloseStatus(err) == websocket.StatusNormalClosure || err == io.EOF {
+			case websocket.CloseStatus(err) == websocket.StatusNormalClosure || errors.Is(err, io.EOF):
 				log.Println("[i] Cliente cerró la conexión normalmente")
-			} else {
+			default:
 				log.Printf("[!] Error de lectura: %v", err)
 			}
 			break
@@ -238,7 +240,7 @@ func (s *Server) handleConfigMessage(mensaje map[string]interface{}) {
 }
 
 // HandlePing is a lightweight liveness check
-func (s *Server) HandlePing(w http.ResponseWriter, r *http.Request) {
+func (s *Server) HandlePing(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
@@ -249,7 +251,7 @@ func (s *Server) HandlePing(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleHealth returns service health metrics
-func (s *Server) HandleHealth(w http.ResponseWriter, r *http.Request) {
+func (s *Server) HandleHealth(w http.ResponseWriter, _ *http.Request) {
 	cfg := s.config.Get()
 
 	// If last weight was received < 15 seconds ago, assume connected.
