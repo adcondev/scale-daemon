@@ -39,15 +39,20 @@ func TestBroadcasterLogic(t *testing.T) {
 	dial := func() *websocket.Conn {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		c, _, err := websocket.Dial(ctx, server.URL, nil)
+		c, resp, err := websocket.Dial(ctx, server.URL, nil)
 		if err != nil {
 			t.Fatalf("Failed to dial: %v", err)
+		}
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
 		}
 		return c
 	}
 
 	c1 := dial()
-	defer c1.Close(websocket.StatusNormalClosure, "")
+	defer func() {
+		_ = c1.Close(websocket.StatusNormalClosure, "")
+	}()
 
 	// 1. AddClient
 	broadcaster.AddClient(c1)
@@ -67,7 +72,9 @@ func TestBroadcasterLogic(t *testing.T) {
 
 	// 2. Add another client
 	c2 := dial()
-	defer c2.Close(websocket.StatusNormalClosure, "")
+	defer func() {
+		_ = c2.Close(websocket.StatusNormalClosure, "")
+	}()
 	broadcaster.AddClient(c2)
 
 	broadcaster.mu.RLock()
@@ -137,10 +144,13 @@ func BenchmarkBroadcastWeight(b *testing.B) {
 
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			c, _, err := websocket.Dial(ctx, server.URL, nil)
+			c, resp, err := websocket.Dial(ctx, server.URL, nil)
 			if err != nil {
 				b.Logf("Failed to dial: %v", err)
 				return
+			}
+			if resp != nil && resp.Body != nil {
+				resp.Body.Close()
 			}
 			clients[idx] = c
 			broadcaster.AddClient(c)
@@ -173,7 +183,7 @@ func BenchmarkBroadcastWeight(b *testing.B) {
     // Cleanup
     for _, c := range clients {
         if c != nil {
-            c.Close(websocket.StatusNormalClosure, "")
+            _ = c.Close(websocket.StatusNormalClosure, "")
         }
     }
 }
