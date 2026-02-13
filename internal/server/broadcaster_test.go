@@ -44,7 +44,7 @@ func TestBroadcasterLogic(t *testing.T) {
 			t.Fatalf("Failed to dial: %v", err)
 		}
 		if resp != nil && resp.Body != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 		return c
 	}
@@ -150,7 +150,7 @@ func BenchmarkBroadcastWeight(b *testing.B) {
 				return
 			}
 			if resp != nil && resp.Body != nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 			clients[idx] = c
 			broadcaster.AddClient(c)
