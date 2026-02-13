@@ -80,11 +80,22 @@ func GenerateSimulatedWeights() []float64 {
 	return weights
 }
 
+// Port interface to abstract serial port dependency for testing
+type Port interface {
+	io.ReadWriteCloser
+	SetReadTimeout(time.Duration) error
+}
+
+// variable to allow mocking serial.Open
+var serialOpen = func(name string, mode *serial.Mode) (Port, error) {
+	return serial.Open(name, mode)
+}
+
 // Reader manages serial port communication with the scale
 type Reader struct {
 	config    *config.Config
 	broadcast chan<- string
-	port      serial.Port
+	port      Port
 	mu        sync.Mutex
 	stopCh    chan struct{}
 }
@@ -198,7 +209,15 @@ func (r *Reader) readCycle(ctx context.Context) {
 			break
 		}
 
+		r.mu.Unlock()
+
 		time.Sleep(500 * time.Millisecond)
+
+		r.mu.Lock()
+		if r.port == nil {
+			r.mu.Unlock()
+			break
+		}
 
 		// Read response
 		buf := make([]byte, 20)
@@ -256,7 +275,7 @@ func (r *Reader) connect(puerto string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	port, err := serial.Open(puerto, mode)
+	port, err := serialOpen(puerto, mode)
 	if err != nil {
 		return err
 	}
