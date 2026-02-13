@@ -43,7 +43,7 @@ func (m *MockPort) Close() error {
 	return nil
 }
 
-func (m *MockPort) SetReadTimeout(t time.Duration) error {
+func (m *MockPort) SetReadTimeout(_ time.Duration) error {
 	return nil
 }
 
@@ -59,7 +59,7 @@ func TestLockContention(t *testing.T) {
 	defer func() { serialOpen = origSerialOpen }()
 
 	mockPort := &MockPort{}
-	serialOpen = func(name string, mode *serial.Mode) (Port, error) {
+	serialOpen = func(_ string, _ *serial.Mode) (Port, error) {
 		return mockPort, nil
 	}
 
