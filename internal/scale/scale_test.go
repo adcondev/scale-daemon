@@ -67,3 +67,67 @@ func TestSendError(t *testing.T) {
 		t.Error("sendError blocked when channel was full")
 	}
 }
+
+func TestGetCommand(t *testing.T) {
+	// Backup original map and restore after test
+	originalCommands := make(map[string]string)
+	for k, v := range BrandCommands {
+		originalCommands[k] = v
+	}
+	defer func() {
+		BrandCommands = originalCommands
+	}()
+
+	// Add a test brand with a specific command to verify lookup
+	BrandCommands["test_brand"] = "TEST_CMD"
+
+	tests := []struct {
+		name     string
+		brand    string
+		expected string
+	}{
+		{
+			name:     "Known brand lowercase",
+			brand:    "test_brand",
+			expected: "TEST_CMD",
+		},
+		{
+			name:     "Known brand uppercase",
+			brand:    "TEST_BRAND",
+			expected: "TEST_CMD",
+		},
+		{
+			name:     "Known brand mixed case",
+			brand:    "Test_Brand",
+			expected: "TEST_CMD",
+		},
+		{
+			name:     "Existing brand rhino",
+			brand:    "rhino",
+			expected: "P",
+		},
+		{
+			name:     "Unknown brand",
+			brand:    "unknown_brand",
+			expected: "P",
+		},
+		{
+			name:     "Empty brand",
+			brand:    "",
+			expected: "P",
+		},
+		{
+			name:     "Brand with spaces (not trimmed)",
+			brand:    " test_brand ",
+			expected: "P", // map key is "test_brand", input is " test_brand ", so no match
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := GetCommand(tt.brand); got != tt.expected {
+				t.Errorf("GetCommand() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
