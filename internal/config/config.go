@@ -8,9 +8,19 @@ import (
 
 // Build variables (injected via ldflags)
 var (
+	// BuildEnvironment defines the deployment target (local, remote).
 	BuildEnvironment = "local"
-	BuildDate        = "unknown"
-	BuildTime        = "unknown"
+	// BuildDate is the date the binary was built.
+	BuildDate = "unknown"
+	// BuildTime is the time the binary was built.
+	BuildTime = "unknown"
+	// PasswordHashB64 is injected at build time via ldflags.
+	// It contains a bcrypt hash, NOT the plaintext password.
+	// TODO: If empty, authentication is disabled.
+	PasswordHashB64 = ""
+	// AuthToken is injected at build time via ldflags.
+	// If empty, config messages are accepted without token validation.
+	AuthToken = ""
 )
 
 // Environment holds environment-specific settings

@@ -1,16 +1,24 @@
 package server
 
-// ConfigMessage matches the exact JSON structure from clients
-// CONSTRAINT: All fields must match legacy format exactly
+// ConfigMessage matches the exact JSON structure from clients.
+// AuthToken is required when AuthToken is set at build time.
+// CONSTRAINT: All fields must match legacy format exactly. JSON fields can't be changed or be removed.
 type ConfigMessage struct {
 	Tipo       string `json:"tipo"`
 	Puerto     string `json:"puerto"`
 	Marca      string `json:"marca"`
 	ModoPrueba bool   `json:"modoPrueba"`
 	Dir        string `json:"dir,omitempty"`
+	AuthToken  string `json:"authToken"` // Required for config changes
 }
 
-// EnvironmentInfo sent to clients on connection
+// ErrorResponse is sent back to clients when an operation is rejected
+type ErrorResponse struct {
+	Tipo  string `json:"tipo"`
+	Error string `json:"error"`
+}
+
+// EnvironmentInfo is sent to clients on connection
 type EnvironmentInfo struct {
 	Tipo     string          `json:"tipo"`
 	Ambiente string          `json:"ambiente"`

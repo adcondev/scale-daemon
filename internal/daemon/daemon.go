@@ -12,6 +12,7 @@ import (
 
 	"github.com/judwhite/go-svc"
 
+	"github.com/adcondev/scale-daemon/internal/auth"
 	"github.com/adcondev/scale-daemon/internal/config"
 	"github.com/adcondev/scale-daemon/internal/logging"
 	"github.com/adcondev/scale-daemon/internal/scale"
@@ -33,6 +34,7 @@ type Service struct {
 	reader      *scale.Reader
 	broadcaster *server.Broadcaster
 	srv         *server.Server
+	authMgr     *auth.Manager
 
 	// Lifecycle
 	broadcast chan string
@@ -80,6 +82,9 @@ func (s *Service) Start() error {
 	s.quit = make(chan struct{})
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
+	// Create auth manager (bound to service ctx for clean shutdown)
+	s.authMgr = auth.NewManager(s.ctx)
+
 	// Create broadcaster
 	s.broadcaster = server.NewBroadcaster(s.broadcast)
 
@@ -93,6 +98,7 @@ func (s *Service) Start() error {
 		s.env,
 		s.broadcaster,
 		s.logMgr,
+		s.authMgr,
 		buildInfo,
 		s.onConfigChange,
 		s.BuildDate,
