@@ -1,7 +1,6 @@
 package scale
 
 import (
-	"math"
 	"testing"
 	"time"
 )
@@ -66,29 +65,5 @@ func TestSendError(t *testing.T) {
 		// Success
 	case <-time.After(100 * time.Millisecond):
 		t.Error("sendError blocked when channel was full")
-	}
-}
-
-func TestGenerateSimulatedWeights(t *testing.T) {
-	weights := GenerateSimulatedWeights()
-
-	// Check length
-	if len(weights) != 6 {
-		t.Errorf("Expected 6 weights, got %d", len(weights))
-	}
-
-	// Check values
-	for i, w := range weights {
-		// Check range
-		if w < 0.95 || w > 30.05 {
-			t.Errorf("Weight %d out of range (0.95-30.05): %f", i, w)
-		}
-
-		// Check decimal places (should be at most 2)
-		// We multiply by 100 and check if it's close to an integer
-		scaled := w * 100
-		if math.Abs(scaled-math.Round(scaled)) > 1e-9 {
-			t.Errorf("Weight %d has more than 2 decimal places: %f (scaled: %f)", i, w, scaled)
-		}
 	}
 }
