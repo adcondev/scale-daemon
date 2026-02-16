@@ -103,9 +103,7 @@ func TestBroadcasterLogic(t *testing.T) {
 }
 
 func BenchmarkBroadcastWeight(b *testing.B) {
-	prevOutput := log.Writer()
 	log.SetOutput(io.Discard)
-	defer log.SetOutput(prevOutput)
 	// Setup a mock server to accept websocket connections
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := websocket.Accept(w, r, nil)
@@ -173,17 +171,19 @@ func BenchmarkBroadcastWeight(b *testing.B) {
     }
 
 	b.ResetTimer()
-	broadcaster.broadcastWeight("10.00")
-	b.StopTimer()
-
-	if broadcaster.ClientCount() < numClients {
-		b.Logf("Warning: client count dropped to %d", broadcaster.ClientCount())
+	for i := 0; i < b.N; i++ {
+		broadcaster.broadcastWeight("10.00")
 	}
+    b.StopTimer()
 
-	// Cleanup
-	for _, c := range clients {
-		if c != nil {
-			c.Close(websocket.StatusNormalClosure, "")
-		}
-	}
+    if broadcaster.ClientCount() < numClients {
+        b.Logf("Warning: client count dropped to %d", broadcaster.ClientCount())
+    }
+
+    // Cleanup
+    for _, c := range clients {
+        if c != nil {
+            _ = c.Close(websocket.StatusNormalClosure, "")
+        }
+    }
 }
