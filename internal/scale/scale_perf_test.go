@@ -69,8 +69,13 @@ func TestLockContention(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	// Start reader in background
-	go r.Start(ctx)
+	go func() {
+		defer wg.Done()
+		r.Start(ctx)
+	}()
 
 	// Wait for the reader to enter the read loop and acquire the lock.
 	// We want to catch it during the 500ms sleep.
@@ -93,4 +98,8 @@ func TestLockContention(t *testing.T) {
 	if duration > 100*time.Millisecond {
 		t.Errorf("Lock contention detected: ClosePort took %v, expected < 100ms. The lock is likely held during sleep.", duration)
 	}
+
+	// Wait for the goroutine to finish
+	cancel()
+	wg.Wait()
 }

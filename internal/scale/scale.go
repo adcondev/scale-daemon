@@ -100,6 +100,17 @@ type Reader struct {
 	stopCh    chan struct{}
 }
 
+func (r *Reader) sleep(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-r.stopCh:
+		return false
+	case <-time.After(d):
+		return true
+	}
+}
+
 // NewReader creates a new scale reader
 func NewReader(cfg *config.Config, broadcast chan<- string) *Reader {
 	return &Reader{
@@ -159,9 +170,11 @@ func (r *Reader) readCycle(ctx context.Context) {
 				return
 			case r.broadcast <- fmt.Sprintf("%.2f", peso):
 			}
-			time.Sleep(300 * time.Millisecond)
+			if !r.sleep(ctx, 300*time.Millisecond) {
+				return
+			}
 		}
-		time.Sleep(RetryDelay)
+		r.sleep(ctx, RetryDelay)
 		return
 	}
 
@@ -170,7 +183,7 @@ func (r *Reader) readCycle(ctx context.Context) {
 		log.Printf("[X] No se pudo abrir el puerto serial %s: %v. Reintentando en %s...",
 			conf.Puerto, err, RetryDelay)
 		r.sendError(ErrConnection) // Notify clients of connection failure
-		time.Sleep(RetryDelay)
+		r.sleep(ctx, RetryDelay)
 		return
 	}
 
@@ -205,13 +218,15 @@ func (r *Reader) readCycle(ctx context.Context) {
 			}
 			r.port = nil
 			r.mu.Unlock()
-			time.Sleep(RetryDelay)
+			r.sleep(ctx, RetryDelay)
 			break
 		}
 
 		r.mu.Unlock()
 
-		time.Sleep(500 * time.Millisecond)
+		if !r.sleep(ctx, 500*time.Millisecond) {
+			return
+		}
 
 		r.mu.Lock()
 		if r.port == nil {
@@ -237,7 +252,7 @@ func (r *Reader) readCycle(ctx context.Context) {
 				log.Printf("[!] %s: %s - %v", ErrorDescriptions[ErrRead], conf.Puerto, err)
 				r.sendError(ErrRead)
 				r.closePort()
-				time.Sleep(RetryDelay)
+				r.sleep(ctx, RetryDelay)
 			}
 			continue
 		}
@@ -254,11 +269,13 @@ func (r *Reader) readCycle(ctx context.Context) {
 			log.Println("[!] No se recibió peso significativo.")
 		}
 
-		time.Sleep(300 * time.Millisecond)
+		if !r.sleep(ctx, 300*time.Millisecond) {
+			return
+		}
 	}
 
 	log.Printf("[~] Esperando %s antes de intentar reconectar al puerto serial...", RetryDelay)
-	time.Sleep(RetryDelay)
+	r.sleep(ctx, RetryDelay)
 }
 
 func (r *Reader) sendError(code string) {
