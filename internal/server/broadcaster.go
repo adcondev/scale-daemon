@@ -12,16 +12,18 @@ import (
 
 // Broadcaster fans out weight readings to all connected clients
 type Broadcaster struct {
-	clients   map[*websocket.Conn]bool
-	mu        sync.RWMutex
-	broadcast <-chan string
+	clients      map[*websocket.Conn]bool
+	mu           sync.RWMutex
+	broadcast    <-chan string
+	onWeightSent func() // Called after successful weight broadcast
 }
 
 // NewBroadcaster creates a broadcaster for the given channel
-func NewBroadcaster(broadcast <-chan string) *Broadcaster {
+func NewBroadcaster(broadcast <-chan string, onWeightSent func()) *Broadcaster {
 	return &Broadcaster{
-		clients:   make(map[*websocket.Conn]bool),
-		broadcast: broadcast,
+		clients:      make(map[*websocket.Conn]bool),
+		broadcast:    broadcast,
+		onWeightSent: onWeightSent,
 	}
 }
 
@@ -50,6 +52,10 @@ func (b *Broadcaster) broadcastWeight(peso string) {
 	}
 	b.mu.RUnlock()
 
+	if len(clients) == 0 {
+		return
+	}
+
 	for _, conn := range clients {
 		go func(c *websocket.Conn) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -62,6 +68,10 @@ func (b *Broadcaster) broadcastWeight(peso string) {
 				b.removeAndCloseClient(c)
 			}
 		}(conn)
+	}
+	// Record activity after broadcasting to at least one client
+	if b.onWeightSent != nil {
+		b.onWeightSent()
 	}
 }
 

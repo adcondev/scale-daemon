@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"io/fs"
 	"log"
 	"net/http"
 	"sync"
-	"text/template"
 	"time"
 
 	"github.com/coder/websocket"
@@ -22,6 +22,8 @@ import (
 
 	embedded "github.com/adcondev/scale-daemon"
 )
+
+const maxConfigChangesPerMinute = 15
 
 // Server handles HTTP and WebSocket connections
 type Server struct {
@@ -61,7 +63,7 @@ func NewServer(
 		broadcaster:    broadcaster,
 		logMgr:         logMgr,
 		auth:           authMgr,
-		configLimiter:  NewConfigRateLimiter(3), // Max 3 config changes per minute per client
+		configLimiter:  NewConfigRateLimiter(maxConfigChangesPerMinute), // Max 15 config changes per minute per client
 		buildInfo:      buildInfo,
 		onConfigChange: onConfigChange,
 		buildDate:      buildDate,
@@ -96,10 +98,11 @@ func NewServer(
 	mux.HandleFunc("/auth/login", s.handleLogin)
 	mux.HandleFunc("/auth/logout", s.handleLogout)
 	mux.HandleFunc("/ping", s.HandlePing)
+	mux.HandleFunc("/ws", s.handleWebSocket)
+	mux.HandleFunc("/health", s.HandleHealth)
 
 	// ── PROTECTED ROUTES (session required) ──────────────────
-	mux.HandleFunc("/ws", s.requireAuth(s.handleWebSocket))
-	mux.HandleFunc("/health", s.requireAuth(s.HandleHealth))
+
 	mux.HandleFunc("/", s.requireAuth(s.serveDashboard))
 
 	s.httpServer = &http.Server{
@@ -385,6 +388,7 @@ func (s *Server) handleConfigMessage(ctx context.Context, c *websocket.Conn, men
 // HTTP ENDPOINTS
 // ═══════════════════════════════════════════════════════════════
 
+// HandlePing responds with "pong" for health checks.
 func (s *Server) HandlePing(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "text/plain")
@@ -392,6 +396,7 @@ func (s *Server) HandlePing(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte("pong"))
 }
 
+// HandleHealth returns service health and scale connection status.
 func (s *Server) HandleHealth(w http.ResponseWriter, _ *http.Request) {
 	cfg := s.config.Get()
 
@@ -425,18 +430,19 @@ func (s *Server) HandleHealth(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) sendJSON(ctx context.Context, c *websocket.Conn, v interface{}) {
-	s.recordWeightActivity()
 	ctx2, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	_ = wsjson.Write(ctx2, c, v)
 }
 
-func (s *Server) recordWeightActivity() {
+// RecordWeightActivity updates the last weight timestamp for health checks.
+func (s *Server) RecordWeightActivity() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.lastWeightTime = time.Now()
 }
 
+// ListenAndServe starts the HTTP server and logs the active endpoints and auth status.
 func (s *Server) ListenAndServe() error {
 	log.Printf("[i] Dashboard active at http://%s/", s.env.ListenAddr)
 	log.Printf("[i] WebSocket active at ws://%s/ws", s.env.ListenAddr)
@@ -444,6 +450,7 @@ func (s *Server) ListenAndServe() error {
 	return s.httpServer.ListenAndServe()
 }
 
+// Shutdown gracefully shuts down the HTTP server with a timeout context.
 func (s *Server) Shutdown(ctx context.Context) error {
 	if s.httpServer == nil {
 		return errors.New("server Shutdown called with nil httpServer; invariant violated")

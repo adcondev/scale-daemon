@@ -9,7 +9,7 @@ type ConfigMessage struct {
 	Marca      string `json:"marca"`
 	ModoPrueba bool   `json:"modoPrueba"`
 	Dir        string `json:"dir,omitempty"`
-	AuthToken  string `json:"authToken"` // Required for config changes
+	AuthToken  string `json:"auth_token"` // Required for config changes
 }
 
 // ErrorResponse is sent back to clients when an operation is rejected

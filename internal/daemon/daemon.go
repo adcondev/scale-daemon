@@ -85,8 +85,10 @@ func (s *Service) Start() error {
 	// Create auth manager (bound to service ctx for clean shutdown)
 	s.authMgr = auth.NewManager(s.ctx)
 
-	// Create broadcaster
-	s.broadcaster = server.NewBroadcaster(s.broadcast)
+	// Create broadcaster with weight activity callback
+	s.broadcaster = server.NewBroadcaster(s.broadcast, func() {
+		s.srv.RecordWeightActivity()
+	})
 
 	// Create scale reader
 	s.reader = scale.NewReader(s.cfg, s.broadcast)
