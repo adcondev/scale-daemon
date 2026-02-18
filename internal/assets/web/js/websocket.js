@@ -140,7 +140,7 @@ function sendConfig() {
         puerto: el.puertoInput.value || 'COM3',
         marca: el.marcaSelect.value || 'Rhino BAR 8RS',
         modoPrueba: el.modoPruebaCheck.checked,
-        authToken: getAuthToken()
+        auth_token: getAuthToken()
     };
 
     if (sendMessage(config)) {

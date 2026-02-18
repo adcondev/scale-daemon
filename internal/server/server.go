@@ -1,3 +1,4 @@
+// Package server handles WebSocket connections, HTTP endpoints, and configuration updates for the R2k Ticket Servicio dashboard.
 package server
 
 import (
