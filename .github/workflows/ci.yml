@@ -3,8 +3,18 @@ name: CI
 on:
   push:
     branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   pull_request:
     branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   GO_VERSION: '1.24.x'
@@ -13,19 +23,73 @@ permissions:
   contents: read
 
 jobs:
+  pr-validation:
+    name: 📋 PR Validation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate PR Title
+        uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            deps
+            revert
+          scopes: |
+            github
+            api
+            web
+            auth
+            config
+            daemon
+            scale
+            server
+            general
+          requireScope: true
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            The subject must start with lowercase letter.
+
   test:
     name: 🧪 Test and Coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 10 # 🛑 Hard limit
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Checkout Poster library
+        uses: actions/checkout@v6
+        with:
+          repository: adcondev/poster
+          path: poster
 
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+
+      - name: Patch Go modules for CI
+        run: |
+          go mod edit -replace github.com/adcondev/poster=./poster
 
       - name: Run tests with race detection
         run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
@@ -45,6 +109,7 @@ jobs:
           flags: unittests
           name: codecov-ubuntu
           fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   benchmark:
     name: ⚡ Performance Benchmarks
@@ -61,6 +126,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Checkout Poster library
+        uses: actions/checkout@v6
+        with:
+          repository: adcondev/poster
+          path: poster
+
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
@@ -70,14 +141,20 @@ jobs:
       - name: Run benchmarks (base)
         continue-on-error: true
         run: |
-          git clean -fdx
+          # Ignore our cloned repos so git clean doesn't delete them
+          git clean -fdx -e poster/
+          git reset --hard
           git checkout ${{ github.event.pull_request.base.sha }}
-          go test -bench=. -benchmem -run=^$ ./... > /tmp/base-benchmark.txt 2>&1
+          # Re-apply the patch because checkout restores the base go.mod
+          go mod edit -replace github.com/adcondev/poster=./poster
+          go test -bench=. -benchmem -run=^$ ./... > /tmp/base-benchmark.txt 2>&1 || true
 
       - name: Run benchmarks (current)
         run: |
-          git clean -fdx
+          git clean -fdx -e poster/
+          git reset --hard
           git checkout ${{ github.event.pull_request.head.sha }}
+          go mod edit -replace github.com/adcondev/poster=./poster
           go test -bench=. -benchmem -run=^$ ./... > /tmp/current-benchmark.txt 2>&1
 
       - name: Compare benchmarks
@@ -92,7 +169,7 @@ jobs:
             echo '```' >> benchmark-comment.md
             grep "^Benchmark" /tmp/current-benchmark.txt | head -20 >> benchmark-comment.md
             echo '```' >> benchmark-comment.md
-            
+          
             if grep -q "^Benchmark" /tmp/base-benchmark.txt; then
               echo "" >> benchmark-comment.md
               echo "### 📊 Base Branch Results" >> benchmark-comment.md
@@ -152,15 +229,70 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Checkout Poster library
+        uses: actions/checkout@v6
+        with:
+          repository: adcondev/poster
+          path: poster
+
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
+      - name: Patch Go modules for CI
+        run: |
+          go mod edit -replace github.com/adcondev/poster=./poster
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           skip-cache: false
-          args: --config=./.golangci.yml --timeout=5m
+          args: --config=.golangci.yml --timeout=5m
+
+  build:
+    name: 🏗️ Build Check
+    runs-on: ubuntu-latest
+    needs: test # Only build if tests pass
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Checkout Poster library
+        uses: actions/checkout@v6
+        with:
+          repository: adcondev/poster
+          path: poster
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Patch Go modules for CI
+        run: |
+          go mod edit -replace github.com/adcondev/poster=./poster
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build via Taskfile
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          SCALE_AUTH_TOKEN: ${{ secrets.SCALE_AUTH_TOKEN || 'build-token' }}
+          SCALE_DASHBOARD_HASH: ${{ secrets.SCALE_DASHBOARD_HASH || '' }}
+          BUILD_ENV: 'remote'
+        run: |
+          task build
+          
+          echo "## 📦 Build Artifact" >> $GITHUB_STEP_SUMMARY
+          echo "| File | Size |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|------|" >> $GITHUB_STEP_SUMMARY
+          ls -lh bin/*.exe | awk '{print "| " $9 " | " $5 " |"}' >> $GITHUB_STEP_SUMMARY

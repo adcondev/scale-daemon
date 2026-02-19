@@ -3,14 +3,28 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"sync"
 )
 
 // Build variables (injected via ldflags)
 var (
+	// ServiceName is the name of the service, used for logging and identification.
+	ServiceName = "R2k_BasculaServicio_Local"
+	// BuildEnvironment defines the deployment target (local, remote).
 	BuildEnvironment = "local"
-	BuildDate        = "unknown"
-	BuildTime        = "unknown"
+	// BuildDate is the date the binary was built.
+	BuildDate = "unknown"
+	// BuildTime is the time the binary was built.
+	BuildTime = "unknown"
+	// PasswordHashB64 is injected at build time via ldflags.
+	// It contains a bcrypt hash, NOT the plaintext password.
+	PasswordHashB64 = ""
+	// AuthToken is injected at build time via ldflags.
+	// If empty, config messages are accepted without token validation.
+	AuthToken = ""
+	// ServerPort is the default port for the scale service, can be overridden by environment config.
+	ServerPort = ""
 )
 
 // Environment holds environment-specific settings
@@ -28,15 +42,15 @@ type Environment struct {
 var Environments = map[string]Environment{
 	"remote": {
 		Name:        "REMOTO",
-		ServiceName: "R2k_BasculaServicio_Remote",
-		ListenAddr:  "0.0.0.0:8765",
+		ServiceName: ServiceName,
+		ListenAddr:  "0.0.0.0:" + ServerPort,
 		DefaultPort: "COM3",
 		DefaultMode: false,
 	},
 	"local": {
 		Name:        "LOCAL",
-		ServiceName: "R2k_BasculaServicio_Local",
-		ListenAddr:  "localhost:8765",
+		ServiceName: ServiceName,
+		ListenAddr:  "localhost:" + ServerPort,
 		DefaultPort: "COM3",
 		DefaultMode: false,
 	},
@@ -48,7 +62,8 @@ func GetEnvironment(env string) Environment {
 	if cfg, ok := Environments[env]; ok {
 		return cfg
 	}
-	return Environments["remote"]
+	log.Printf("[!] Unknown environment '%s', defaulting to 'local'", env)
+	return Environments["local"]
 }
 
 // Config holds the runtime configuration for the scale service

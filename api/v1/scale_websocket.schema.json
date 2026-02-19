@@ -44,7 +44,8 @@
         "tipo",
         "puerto",
         "marca",
-        "modoPrueba"
+        "modoPrueba",
+        "authToken"
       ],
       "properties": {
         "tipo": {
@@ -53,8 +54,7 @@
         "puerto": {
           "type": "string",
           "examples": [
-            "COM3",
-            "/dev/ttyUSB0"
+            "COM3"
           ]
         },
         "marca": {
@@ -65,6 +65,30 @@
         },
         "modoPrueba": {
           "type": "boolean"
+        },
+        "authToken": {
+          "type": "string",
+          "description": "Authentication token required to authorize config changes. Injected into dashboard HTML at render time."
+        }
+      }
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "required": [
+        "tipo",
+        "error"
+      ],
+      "properties": {
+        "tipo": {
+          "const": "error"
+        },
+        "error": {
+          "type": "string",
+          "enum": [
+            "AUTH_INVALID_TOKEN",
+            "RATE_LIMITED"
+          ],
+          "description": "Error code for rejected operations"
         }
       }
     },

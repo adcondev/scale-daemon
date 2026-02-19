@@ -77,11 +77,13 @@ func Setup(serviceName string, defaultVerbose bool) (*Manager, error) {
 	mgr.FilePath = filepath.Join(logDir, serviceName+".log")
 
 	// Try to create log directory
+	//nolint:gosec
 	if err := os.MkdirAll(logDir, 0750); err != nil {
 		// Permission denied - fallback to stdout (console mode)
 		log.SetOutput(os.Stdout)
 		mgr.FilePath = ""
-		log.Printf("[i] Logging to stdout (no write access to %s)", logDir)
+		//nolint:gosec
+		log.Printf("[i] Logging to stdout (no write access to %q)", logDir)
 		return mgr, nil
 	}
 

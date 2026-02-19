@@ -61,8 +61,9 @@ function connectWebSocket() {
         // Everything else that parses as JSON but isn't 'ambiente' is treated as weight
         if (msg && typeof msg === 'object' && msg.tipo === 'ambiente') {
             handleAmbienteMessage(msg);
+        } else if (msg && typeof msg === 'object' && msg.tipo === 'error') {
+            handleServerError(msg);   // Handle auth/rate-limit errors
         } else {
-            // Valid JSON but not 'ambiente' -> could be quoted weight string
             handleWeightReading(msg);
         }
     };
@@ -126,17 +127,37 @@ function sendMessage(msg) {
     return true;
 }
 
-// Send configuration update
+// Read the auth token injected by the server into the HTML template
+function getAuthToken() {
+    const meta = document.querySelector('meta[name="ws-auth-token"]');
+    return meta ? meta.content : '';
+}
+
+// Send configuration update (with auth token)
 function sendConfig() {
     const config = {
         tipo: 'config',
         puerto: el.puertoInput.value || 'COM3',
         marca: el.marcaSelect.value || 'Rhino BAR 8RS',
-        modoPrueba: el.modoPruebaCheck.checked
+        modoPrueba: el.modoPruebaCheck.checked,
+        auth_token: getAuthToken()
     };
 
     if (sendMessage(config)) {
         addLog('SENT', `📤 Config: ${config.puerto} | ${config.marca} | Prueba: ${config.modoPrueba}`);
         showToast('Configuración enviada', 'info');
     }
+}
+
+// Also handle new error responses from the server
+// In the onmessage handler, add handling for "error" tipo:
+// (Inside handleAmbienteMessage or a new handler)
+function handleServerError(msg) {
+    const errorMessages = {
+        'AUTH_INVALID_TOKEN': '🔒 Token de autenticación inválido',
+        'RATE_LIMITED': '⏳ Demasiados cambios de configuración. Espere un momento.',
+    };
+    const text = errorMessages[msg.error] || `Error: ${msg.error}`;
+    addLog('ERROR', text, 'error');
+    showToast(text, 'error');
 }

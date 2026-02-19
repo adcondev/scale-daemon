@@ -166,3 +166,89 @@ Los logs se almacenan en `%PROGRAMDATA%` con un sistema de **autorrotación** pa
 
 * **Ruta**: `C:\ProgramData\R2k_Bascula_Remote\R2k_Bascula_Remote.log`
 * **Límite**: 5 MB (al excederse, se conservan las últimas 1000 líneas para trazabilidad).
+
+---
+
+## 🔐 Seguridad
+
+Scale Daemon implementa un modelo de seguridad por capas, diseñado para entornos de retail donde se necesita
+proteger la configuración del servicio sin impactar la lectura de peso en tiempo real.
+
+### Capas de Protección
+
+| Capa                | Protege                                | Mecanismo                                      |
+|---------------------|----------------------------------------|------------------------------------------------|
+| **Dashboard Login** | Acceso al panel de control (`/`)       | Contraseña + sesión con cookie HttpOnly        |
+| **Config Token**    | Cambios de configuración vía WebSocket | Token de autorización en cada mensaje `config` |
+| **Rate Limiter**    | Abuso de configuración                 | Máximo 3 cambios por minuto por conexión       |
+| **Brute Force**     | Ataques de fuerza bruta al login       | Bloqueo de IP tras 5 intentos fallidos (5 min) |
+
+### Modelo de Acceso por Endpoint
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  PÚBLICO (sin autenticación)                                    │
+│  ├── GET  /login          Página de login                       │
+│  ├── POST /auth/login     Procesar login                        │
+│  ├── GET  /ping           Verificación de latencia              │
+│  ├── GET  /health         Diagnóstico del servicio              │
+│  ├── WS   /ws             Streaming de peso + config (token)    │
+│  ├── GET  /css/*          Archivos estáticos                    │
+│  └── GET  /js/*           Archivos estáticos                    │
+│                                                                 │
+│  PROTEGIDO (sesión requerida)                                   │
+│  └── GET  /               Dashboard (inyecta config token)      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+> **Nota:** El endpoint `/ws` es público para permitir que aplicaciones POS reciban peso sin necesidad de
+> autenticarse en el dashboard. Los cambios de configuración dentro del WebSocket están protegidos por el
+> `authToken`, que sólo está disponible para sesiones autenticadas a través del dashboard.
+
+### Configuración
+
+Los secretos se definen en un archivo `.env` en el directorio del build system (`poster-tuis/`):
+
+```env
+# ⚠️ NO commitear a control de versiones
+DASHBOARD_PASSWORD=MiContraseña2026
+CONFIG_AUTH_TOKEN=mi-token-secreto
+```
+
+| Variable             | Vacío =                                          | Descripción                                        |
+|----------------------|--------------------------------------------------|----------------------------------------------------|
+| `DASHBOARD_PASSWORD` | Auth deshabilitado (acceso directo al dashboard) | Contraseña para el login del dashboard             |
+| `CONFIG_AUTH_TOKEN`  | Config sin validación de token                   | Token requerido en mensajes `config` vía WebSocket |
+
+### Pipeline de Inyección
+
+```text
+.env (plaintext) 
+  → hashpw (bcrypt + base64) 
+    → ldflags -X PasswordHashB64=... 
+      → binario compilado (sin plaintext)
+```
+
+La contraseña **nunca** se almacena en texto plano en el binario. Se inyecta como un hash bcrypt codificado
+en base64 mediante `ldflags` durante la compilación. El token de configuración se inyecta directamente
+(no es un secreto criptográfico, es un valor de autorización).
+
+### Sesiones
+
+- Duración: **15 minutos** (configurable en `auth.go`)
+- Cookie: `sd_session`, `HttpOnly`, `SameSite=Strict`
+- Almacenamiento: en memoria del proceso (se pierden al reiniciar el servicio)
+- Limpieza automática: goroutine periódica cada 5 minutos
+
+### Auditoría
+
+Todos los eventos de seguridad se registran con el prefijo `[AUDIT]`:
+
+```
+[AUDIT] LOGIN_SUCCESS | IP=192.168.1.100:54321
+[AUDIT] LOGIN_FAILED | IP=192.168.1.100:54322
+[AUDIT] LOGIN_BLOCKED | IP=192.168.1.100:54323 | reason=lockout
+[AUDIT] CONFIG_ACCEPTED | puerto=COM4 marca=Rhino modoPrueba=false
+[AUDIT] CONFIG_REJECTED | reason=invalid_token | puerto=COM4 marca=Rhino
+[AUDIT] CONFIG_RATE_LIMITED | client=0xc0001a2000
+```

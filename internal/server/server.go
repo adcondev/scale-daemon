@@ -1,10 +1,12 @@
-// Package server implements the HTTP and WebSocket server for the scale daemon.
+// Package server handles WebSocket connections, HTTP endpoints, and configuration updates for the R2k Ticket Servicio dashboard.
 package server
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"html/template"
 	"io"
 	"io/fs"
 	"log"
@@ -15,11 +17,14 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
+	"github.com/adcondev/scale-daemon/internal/auth"
 	"github.com/adcondev/scale-daemon/internal/config"
 	"github.com/adcondev/scale-daemon/internal/logging"
 
-	"github.com/adcondev/scale-daemon"
+	embedded "github.com/adcondev/scale-daemon"
 )
+
+const maxConfigChangesPerMinute = 15
 
 // Server handles HTTP and WebSocket connections
 type Server struct {
@@ -27,6 +32,8 @@ type Server struct {
 	env            config.Environment
 	broadcaster    *Broadcaster
 	logMgr         *logging.Manager
+	auth           *auth.Manager
+	configLimiter  *ConfigRateLimiter
 	buildInfo      string
 	onConfigChange func()
 	buildDate      string
@@ -35,6 +42,7 @@ type Server struct {
 	mu             sync.RWMutex
 	lastWeightTime time.Time
 	httpServer     *http.Server
+	dashboardTmpl  *template.Template
 }
 
 // NewServer creates a new server instance
@@ -43,6 +51,7 @@ func NewServer(
 	env config.Environment,
 	broadcaster *Broadcaster,
 	logMgr *logging.Manager,
+	authMgr *auth.Manager,
 	buildInfo string,
 	onConfigChange func(),
 	buildDate string,
@@ -54,6 +63,8 @@ func NewServer(
 		env:            env,
 		broadcaster:    broadcaster,
 		logMgr:         logMgr,
+		auth:           authMgr,
+		configLimiter:  NewConfigRateLimiter(maxConfigChangesPerMinute), // Max 15 config changes per minute per client
 		buildInfo:      buildInfo,
 		onConfigChange: onConfigChange,
 		buildDate:      buildDate,
@@ -61,25 +72,43 @@ func NewServer(
 		startTime:      startTime,
 	}
 
-	// Setup HTTP handlers
-	mux := http.NewServeMux()
-	mux.HandleFunc("/ws", s.handleWebSocket)
-	mux.HandleFunc("/health", s.HandleHealth)
-	mux.HandleFunc("/ping", s.HandlePing)
-
-	// Setup FS
+	// Setup embedded filesystem
 	webFS, err := fs.Sub(embedded.WebFiles, "internal/assets/web")
 	if err != nil {
-		// Panic is acceptable here as service cannot function without assets
 		log.Fatalf("[FATAL] Error loading web assets: %v", err)
 	}
-	mux.Handle("/", http.FileServer(http.FS(webFS)))
 
-	// This ensures s.httpServer is NEVER nil once NewServer returns
+	// Parse index.html as a Go template for token injection
+	indexBytes, err := fs.ReadFile(webFS, "index.html")
+	if err != nil {
+		log.Fatalf("[FATAL] Error reading index.html: %v", err)
+	}
+	s.dashboardTmpl, err = template.New("dashboard").Parse(string(indexBytes))
+	if err != nil {
+		log.Fatalf("[FATAL] Error parsing index.html as template: %v", err)
+	}
+
+	// Setup HTTP handlers with correct auth boundaries
+	mux := http.NewServeMux()
+
+	// ── PUBLIC ROUTES (no auth required) ─────────────────────
+	// Static assets must be public so login.html can load CSS
+	mux.Handle("/css/", http.FileServer(http.FS(webFS)))
+	mux.Handle("/js/", http.FileServer(http.FS(webFS)))
+	mux.HandleFunc("/login", s.serveLoginPage(webFS))
+	mux.HandleFunc("/auth/login", s.handleLogin)
+	mux.HandleFunc("/auth/logout", s.handleLogout)
+	mux.HandleFunc("/ping", s.HandlePing)
+	mux.HandleFunc("/ws", s.handleWebSocket)
+	mux.HandleFunc("/health", s.HandleHealth)
+
+	// ── PROTECTED ROUTES (session required) ──────────────────
+
+	mux.HandleFunc("/", s.requireAuth(s.serveDashboard))
+
 	s.httpServer = &http.Server{
-		Addr:    env.ListenAddr,
-		Handler: mux,
-		// ALWAYS add timeouts to prevent Slowloris attacks
+		Addr:         env.ListenAddr,
+		Handler:      mux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -88,17 +117,119 @@ func NewServer(
 	return s
 }
 
-// handleWebSocket upgrades the connection
+// ═══════════════════════════════════════════════════════════════
+// AUTH MIDDLEWARE & HANDLERS
+// ═══════════════════════════════════════════════════════════════
+
+// requireAuth wraps a HandlerFunc with session validation.
+// If auth is disabled (no hash), all requests pass through.
+func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !s.auth.Enabled() {
+			next(w, r)
+			return
+		}
+		if !s.auth.GetSessionFromRequest(r) {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+		next(w, r)
+	}
+}
+
+// serveLoginPage returns a handler that serves login.html from the embedded FS.
+func (s *Server) serveLoginPage(webFS fs.FS) http.HandlerFunc {
+	loginHTML, err := fs.ReadFile(webFS, "login.html")
+	if err != nil {
+		log.Fatalf("[FATAL] Error reading login.html: %v", err)
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		// If auth is disabled, skip login entirely
+		if !s.auth.Enabled() {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		// If already authenticated, redirect to dashboard
+		if s.auth.GetSessionFromRequest(r) {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(loginHTML)
+	}
+}
+
+// serveDashboard renders index.html as a Go template, injecting the config auth token.
+// This solves the "static file injection paradox": index.html is a template, not a static file.
+func (s *Server) serveDashboard(w http.ResponseWriter, r *http.Request) {
+	// Only serve dashboard for root path (avoid catching /favicon.ico etc.)
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	data := struct {
+		//nolint:gosec
+		AuthToken string
+	}{
+		AuthToken: config.AuthToken,
+	}
+	if err := s.dashboardTmpl.Execute(w, data); err != nil {
+		log.Printf("[X] Error rendering dashboard template: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// handleLogin processes POST /auth/login
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ip := r.RemoteAddr
+
+	// Check lockout FIRST
+	if s.auth.IsLockedOut(ip) {
+		//nolint:gosec
+		log.Printf("[AUDIT] LOGIN_BLOCKED | IP=%q | reason=lockout", ip)
+		http.Redirect(w, r, "/login?locked=1", http.StatusSeeOther)
+		return
+	}
+
+	password := r.FormValue("password")
+	if !s.auth.ValidatePassword(password) {
+		s.auth.RecordFailedLogin(ip)
+		//nolint:gosec
+		log.Printf("[AUDIT] LOGIN_FAILED | IP=%q", ip)
+		http.Redirect(w, r, "/login?error=1", http.StatusSeeOther)
+		return
+	}
+
+	// Success
+	s.auth.ClearFailedLogins(ip)
+	s.auth.SetSessionCookie(w)
+	//nolint:gosec
+	log.Printf("[AUDIT] LOGIN_SUCCESS | IP=%q", ip)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// handleLogout clears the session
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	s.auth.ClearSessionCookie(w)
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WEBSOCKET
+// ═══════════════════════════════════════════════════════════════
+
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	// No need to check "Upgrade" header here manually;
-	// clients connecting to /ws likely intend to upgrade.
-
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		// FIXME: InsecureSkipVerify should be false in production with proper certs
 		InsecureSkipVerify: true,
-		OriginPatterns:     []string{"*"},
+		OriginPatterns:     s.allowedOrigins(),
 	})
-
 	if err != nil {
 		log.Printf("[X] Error accepting websocket: %v", err)
 		return
@@ -112,19 +243,23 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	// Register client
 	s.broadcaster.AddClient(c)
 	log.Printf("[+] Client connected (Total: %d)", s.broadcaster.ClientCount())
 
-	// Send initial state
 	s.sendEnvironmentInfo(ctx, c)
-
-	// Listen for incoming config messages
 	s.listenForMessages(ctx, c)
 
-	// Cleanup
 	s.broadcaster.RemoveClient(c)
 	log.Println("[-] Client disconnected")
+}
+
+// allowedOrigins returns environment-specific WebSocket origin patterns.
+func (s *Server) allowedOrigins() []string {
+	if s.env.Name == "LOCAL" {
+		return []string{"localhost:*", "127.0.0.1:*"}
+	}
+	// Remote: allow common private network ranges
+	return []string{"192.168.*.*:*", "10.*.*.*:*", "172.16.*.*:*", "localhost:*"}
 }
 
 func (s *Server) sendEnvironmentInfo(ctx context.Context, c *websocket.Conn) {
@@ -180,7 +315,15 @@ func (s *Server) listenForMessages(ctx context.Context, c *websocket.Conn) {
 func (s *Server) handleMessage(ctx context.Context, c *websocket.Conn, tipo string, mensaje map[string]interface{}) {
 	switch tipo {
 	case "config":
-		s.handleConfigMessage(mensaje)
+		// ── RATE LIMIT CHECK ─────────────────────────────────
+		// Use connection pointer address as unique client identifier
+		clientAddr := fmt.Sprintf("%p", c)
+		if !s.configLimiter.Allow(clientAddr) {
+			log.Printf("[AUDIT] CONFIG_RATE_LIMITED | client=%s", clientAddr)
+			s.sendJSON(ctx, c, ErrorResponse{Tipo: "error", Error: "RATE_LIMITED"})
+			return
+		}
+		s.handleConfigMessage(ctx, c, mensaje)
 
 	case "logConfig":
 		if v, ok := mensaje["verbose"].(bool); ok {
@@ -215,17 +358,24 @@ func (s *Server) handleMessage(ctx context.Context, c *websocket.Conn, tipo stri
 	}
 }
 
-func (s *Server) handleConfigMessage(mensaje map[string]interface{}) {
+func (s *Server) handleConfigMessage(ctx context.Context, c *websocket.Conn, mensaje map[string]interface{}) {
 	// Parse into struct for type safety
 	data, _ := json.Marshal(mensaje)
 	var configMsg ConfigMessage
-	err := json.Unmarshal(data, &configMsg)
-	if err != nil {
+	if err := json.Unmarshal(data, &configMsg); err != nil {
 		log.Printf("[X] Error parsing config message: %v", err)
 		return
 	}
 
-	log.Printf("[i] Configuración recibida: Puerto=%s Marca=%s ModoPrueba=%v",
+	// ── TOKEN VALIDATION ─────────────────────────────────────
+	if config.AuthToken != "" && configMsg.AuthToken != config.AuthToken {
+		log.Printf("[AUDIT] CONFIG_REJECTED | reason=invalid_token | puerto=%s marca=%s",
+			configMsg.Puerto, configMsg.Marca)
+		s.sendJSON(ctx, c, ErrorResponse{Tipo: "error", Error: "AUTH_INVALID_TOKEN"})
+		return
+	}
+
+	log.Printf("[AUDIT] CONFIG_ACCEPTED | puerto=%s marca=%s modoPrueba=%v",
 		configMsg.Puerto, configMsg.Marca, configMsg.ModoPrueba)
 
 	if s.config.Update(configMsg.Puerto, configMsg.Marca, configMsg.ModoPrueba) {
@@ -239,28 +389,26 @@ func (s *Server) handleConfigMessage(mensaje map[string]interface{}) {
 	}
 }
 
-// HandlePing is a lightweight liveness check
+// ═══════════════════════════════════════════════════════════════
+// HTTP ENDPOINTS
+// ═══════════════════════════════════════════════════════════════
+
+// HandlePing responds with "pong" for health checks.
 func (s *Server) HandlePing(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
-	_, err := w.Write([]byte("pong"))
-	if err != nil {
-		return
-	}
+	_, _ = w.Write([]byte("pong"))
 }
 
-// HandleHealth returns service health metrics
+// HandleHealth returns service health and scale connection status.
 func (s *Server) HandleHealth(w http.ResponseWriter, _ *http.Request) {
 	cfg := s.config.Get()
 
-	// If last weight was received < 15 seconds ago, assume connected.
-	// Adjust threshold based on your poll interval.
 	s.mu.RLock()
 	isConnected := !s.lastWeightTime.IsZero() && time.Since(s.lastWeightTime) < 15*time.Second
 	s.mu.RUnlock()
 
-	// If in Test Mode, we are always "connected" to the generator
 	if cfg.ModoPrueba {
 		isConnected = true
 	}
@@ -278,43 +426,36 @@ func (s *Server) HandleHealth(w http.ResponseWriter, _ *http.Request) {
 			Date: s.buildDate,
 			Time: s.buildTime,
 		},
-		// Safe uptime calculation
 		Uptime: int(time.Since(s.startTime).Seconds()),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	err := json.NewEncoder(w).Encode(response)
-	if err != nil {
-		return
-	}
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 func (s *Server) sendJSON(ctx context.Context, c *websocket.Conn, v interface{}) {
-	// Record activity whenever we successfully send data (e.g. weight updates)
-	s.recordWeightActivity()
-
 	ctx2, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	_ = wsjson.Write(ctx2, c, v)
 }
 
-func (s *Server) recordWeightActivity() {
+// RecordWeightActivity updates the last weight timestamp for health checks.
+func (s *Server) RecordWeightActivity() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.lastWeightTime = time.Now()
 }
 
-// ListenAndServe inicia el servidor HTTP
+// ListenAndServe starts the HTTP server and logs the active endpoints and auth status.
 func (s *Server) ListenAndServe() error {
 	log.Printf("[i] Dashboard active at http://%s/", s.env.ListenAddr)
 	log.Printf("[i] WebSocket active at ws://%s/ws", s.env.ListenAddr)
-
-	// Just start the already-configured server
+	log.Printf("[i] Auth enabled: %v", s.auth.Enabled())
 	return s.httpServer.ListenAndServe()
 }
 
-// Shutdown gracefully shuts down the HTTP server
+// Shutdown gracefully shuts down the HTTP server with a timeout context.
 func (s *Server) Shutdown(ctx context.Context) error {
 	if s.httpServer == nil {
 		return errors.New("server Shutdown called with nil httpServer; invariant violated")

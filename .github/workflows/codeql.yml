@@ -8,12 +8,14 @@ on:
       - 'go.mod'
       - 'go.sum'
       - '.github/workflows/codeql.yml'
+      - '.github/codeql-config.yml' # Trigger on config changes too
   pull_request:
     branches: [ main, master ]
     paths:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
+      - '.github/codeql-config.yml'
   schedule:
     # Run every Monday at midnight UTC
     - cron: '0 0 * * 1'
@@ -51,6 +53,8 @@ jobs:
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
+          # ⬇️ CRITICAL: Links to your config file ⬇️
+          config-file: ./.github/codeql-config.yml
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@v4
