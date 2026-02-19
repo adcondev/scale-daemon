@@ -23,6 +23,49 @@ permissions:
   contents: read
 
 jobs:
+  pr-validation:
+    name: 📋 PR Validation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate PR Title
+        uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            deps
+            revert
+          scopes: |
+            github
+            api
+            web
+            auth
+            config
+            daemon
+            scale
+            server
+            general
+          requireScope: true
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            The subject must start with lowercase letter.
+
   test:
     name: 🧪 Test and Coverage
     runs-on: ubuntu-latest
