@@ -80,13 +80,35 @@ func GenerateSimulatedWeights() []float64 {
 	return weights
 }
 
+// Port interface to abstract serial port dependency for testing
+type Port interface {
+	io.ReadWriteCloser
+	SetReadTimeout(time.Duration) error
+}
+
+// variable to allow mocking serial.Open
+var serialOpen = func(name string, mode *serial.Mode) (Port, error) {
+	return serial.Open(name, mode)
+}
+
 // Reader manages serial port communication with the scale
 type Reader struct {
 	config    *config.Config
 	broadcast chan<- string
-	port      serial.Port
+	port      Port
 	mu        sync.Mutex
 	stopCh    chan struct{}
+}
+
+func (r *Reader) sleep(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-r.stopCh:
+		return false
+	case <-time.After(d):
+		return true
+	}
 }
 
 // NewReader creates a new scale reader
@@ -148,9 +170,11 @@ func (r *Reader) readCycle(ctx context.Context) {
 				return
 			case r.broadcast <- fmt.Sprintf("%.2f", peso):
 			}
-			time.Sleep(300 * time.Millisecond)
+			if !r.sleep(ctx, 300*time.Millisecond) {
+				return
+			}
 		}
-		time.Sleep(RetryDelay)
+		r.sleep(ctx, RetryDelay)
 		return
 	}
 
@@ -159,7 +183,7 @@ func (r *Reader) readCycle(ctx context.Context) {
 		log.Printf("[X] No se pudo abrir el puerto serial %s: %v. Reintentando en %s...",
 			conf.Puerto, err, RetryDelay)
 		r.sendError(ErrConnection) // Notify clients of connection failure
-		time.Sleep(RetryDelay)
+		r.sleep(ctx, RetryDelay)
 		return
 	}
 
@@ -194,11 +218,21 @@ func (r *Reader) readCycle(ctx context.Context) {
 			}
 			r.port = nil
 			r.mu.Unlock()
-			time.Sleep(RetryDelay)
+			r.sleep(ctx, RetryDelay)
 			break
 		}
 
-		time.Sleep(500 * time.Millisecond)
+		r.mu.Unlock()
+
+		if !r.sleep(ctx, 500*time.Millisecond) {
+			return
+		}
+
+		r.mu.Lock()
+		if r.port == nil {
+			r.mu.Unlock()
+			break
+		}
 
 		// Read response
 		buf := make([]byte, 20)
@@ -218,7 +252,7 @@ func (r *Reader) readCycle(ctx context.Context) {
 				log.Printf("[!] %s: %s - %v", ErrorDescriptions[ErrRead], conf.Puerto, err)
 				r.sendError(ErrRead)
 				r.closePort()
-				time.Sleep(RetryDelay)
+				r.sleep(ctx, RetryDelay)
 			}
 			continue
 		}
@@ -235,11 +269,13 @@ func (r *Reader) readCycle(ctx context.Context) {
 			log.Println("[!] No se recibió peso significativo.")
 		}
 
-		time.Sleep(300 * time.Millisecond)
+		if !r.sleep(ctx, 300*time.Millisecond) {
+			return
+		}
 	}
 
 	log.Printf("[~] Esperando %s antes de intentar reconectar al puerto serial...", RetryDelay)
-	time.Sleep(RetryDelay)
+	r.sleep(ctx, RetryDelay)
 }
 
 func (r *Reader) sendError(code string) {
@@ -256,7 +292,7 @@ func (r *Reader) connect(puerto string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	port, err := serial.Open(puerto, mode)
+	port, err := serialOpen(puerto, mode)
 	if err != nil {
 		return err
 	}
