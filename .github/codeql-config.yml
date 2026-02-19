@@ -1,0 +1,38 @@
+name: "Ticket Daemon CodeQL Config"
+
+# Query settings
+disable-default-queries: false
+
+# Queries to run
+queries:
+  - uses: security-extended
+  - uses: security-and-quality
+
+# Exclude test files, examples, and vendored code
+paths-ignore:
+  # Test files
+  - '**/*_test.go'
+  - 'test/**'
+  - 'internal/testutils/**'
+
+  # Examples (not production code)
+  - 'examples/**'
+
+  # Vendored dependencies
+  - 'vendor/**'
+
+  # Test data
+  - 'testdata/**'
+
+  # Build artifacts
+  - '*.exe'
+  - '*.dll'
+  - '*.so'
+
+  # IDE files
+  - '.idea/**'
+  - '.vscode/**'
+
+# Advanced: Query packs
+packs:
+  - codeql/go-queries

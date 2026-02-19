@@ -53,8 +53,10 @@ jobs:
   pr-comment:
     name: PR Comment
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.event.action == 'opened'
-
+    if: >-
+      github.event_name == 'pull_request' && 
+      github.event.action == 'opened' &&
+      github.actor != github.repository_owner
     steps:
       - name: Comment on PR
         uses: actions/github-script@v8
