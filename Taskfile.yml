@@ -1,0 +1,40 @@
+version: '3'
+
+# Carga variables desde el archivo .env automáticamente
+dotenv: [ '.env' ]
+
+vars:
+  # Ruta del paquete de configuración donde están las variables globales
+  CONFIG_PKG: github.com/adcondev/scale-daemon/internal/config
+  BINARY_NAME: R2k_ScaleServicio_Local.exe
+
+tasks:
+  build:
+    desc: Compila el servicio inyectando credenciales desde .env (Modo Consola)
+    cmds:
+      - echo "🔨 Compilando {{.BINARY_NAME}}..."
+      # Se usa -ldflags para inyectar las variables en tiempo de compilación.
+      # Se eliminó -H=windowsgui para permitir ver logs en consola.
+      - >
+        go build -ldflags "-s -w
+        -X '{{.CONFIG_PKG}}.AuthToken={{.SCALE_AUTH_TOKEN}}'
+        -X '{{.CONFIG_PKG}}.PasswordHashB64={{.SCALE_DASHBOARD_HASH}}'
+        -X '{{.CONFIG_PKG}}.BuildEnvironment={{.BUILD_ENV}}'
+        -X '{{.CONFIG_PKG}}.ServiceName=R2k_ScaleServicio'"
+        -o bin/{{.BINARY_NAME}} ./cmd/BasculaServicio
+      - echo "✅ Compilación exitosa en bin/{{.BINARY_NAME}}"
+
+  run:
+    desc: Compila y ejecuta inmediatamente
+    deps: [ build ]
+    cmds:
+      - ./bin/{{.BINARY_NAME}} -console
+
+  clean:
+    desc: Limpia los artefactos de compilación
+    cmds:
+      - cmd: rm -rf bin/
+        platforms: [ linux, darwin ]
+      - cmd: powershell -Command "Remove-Item -Recurse -Force bin/"
+        platforms: [ windows ]
+      - echo "🧹 Limpieza completada"
