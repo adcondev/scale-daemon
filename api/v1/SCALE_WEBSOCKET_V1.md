@@ -1,4 +1,22 @@
-# Scale Daemon - WebSocket API v1.0.0
+# Scale Daemon - WebSocket API v1.0
+
+## Índice
+* [Descripción General](#descripción-general)
+* [Endpoints](#endpoints)
+    * [Configuración por Ambiente](#configuración-por-ambiente)
+* [Protocolo WebSocket](#protocolo-websocket)
+    * [Ciclo de Vida de Conexión](#ciclo-de-vida-de-conexión)
+* [Mensajes del Cliente → Servidor](#mensajes-del-cliente--servidor)
+    * [1. `config` - Actualizar Configuración](#1-config---actualizar-configuración)
+* [Mensajes del Servidor → Cliente](#mensajes-del-servidor--cliente)
+    * [1. `ambiente` - Información Inicial](#1-ambiente---información-inicial)
+    * [2. Streaming de Peso (String Puro)](#2-streaming-de-peso-string-puro)
+    * [3. Códigos de Error (Broadcasting)](#3-códigos-de-error-broadcasting)
+    * [4. Códigos de Error (Control y Configuración)](#4-códigos-de-error-control-y-configuración)
+* [HTTP Endpoints](#http-endpoints)
+    * [GET `/health`](#get-health)
+    * [GET `/ping`](#get-ping)
+* [Implementación de Cliente (Ejemplo JS)](#implementación-de-cliente-ejemplo-js)
 
 ## Descripción General
 
@@ -54,7 +72,8 @@ A diferencia de otros protocolos puramente basados en objetos JSON, este servici
 
 ### 1. `config` - Actualizar Configuración
 
-Modifica los parámetros de conexión con la báscula en caliente.
+Modifica los parámetros de conexión con la báscula en caliente. Requiere un token de autorización si el servidor fue
+compilado con seguridad habilitada.
 
 **Estructura:**
 
@@ -63,17 +82,18 @@ Modifica los parámetros de conexión con la báscula en caliente.
   "tipo": "config",
   "puerto": "COM3",
   "marca": "Rhino BAR 8RS",
-  "modoPrueba": false
+  "modoPrueba": false,
+  "auth_token": "tu-token-de-seguridad"
 }
-
 ```
 
-| Campo        | Tipo    | Requerido | Descripción                                       |
-|--------------|---------|-----------|---------------------------------------------------|
-| `tipo`       | string  | ✓         | Debe ser `"config"`                               |
-| `puerto`     | string  | ✓         | Puerto serial (`COM1`, `COM3`, `/dev/ttyUSB0`)    |
-| `marca`      | string  | ✓         | Marca de la báscula (`Rhino BAR 8RS`, `rhino`)    |
-| `modoPrueba` | boolean | ✓         | `true` para generar pesos simulados, `false` real |
+| Campo        | Tipo    | Requerido | Descripción                                                                       |
+|--------------|---------|-----------|-----------------------------------------------------------------------------------|
+| `tipo`       | string  | ✓         | Debe ser `"config"`                                                               |
+| `puerto`     | string  | ✓         | Puerto serial (`COM1`, `COM3`, `/dev/ttyUSB0`)                                    |
+| `marca`      | string  | ✓         | Marca de la báscula (`Rhino BAR 8RS`, `rhino`)                                    |
+| `modoPrueba` | boolean | ✓         | `true` para generar pesos simulados, `false` real                                 |
+| `auth_token` | string  | ✓*        | Token de autenticación para autorizar cambios (Requerido si el backend lo exige). |
 
 ---
 
@@ -128,6 +148,25 @@ Los errores críticos se envían a través del mismo canal de streaming, prefija
 "ERR_SCALE_CONN"
 
 ```
+
+### 4. Códigos de Error (Control y Configuración)
+
+Cuando falla una operación enviada por el cliente (por ejemplo, al intentar cambiar la configuración), el servidor
+responde con un objeto JSON estructurado, no con un string de streaming.
+
+**Estructura:**
+
+```json
+{
+  "tipo": "error",
+  "error": "AUTH_INVALID_TOKEN"
+}
+
+```
+
+Código,Causa
+AUTH_INVALID_TOKEN,El auth_token proporcionado en el mensaje config es incorrecto o está ausente.
+RATE_LIMITED,Se ha excedido el límite de cambios de configuración (máximo 15 por minuto por cliente).
 
 ---
 

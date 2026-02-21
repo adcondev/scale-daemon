@@ -45,7 +45,7 @@
         "puerto",
         "marca",
         "modoPrueba",
-        "authToken"
+        "auth_token"
       ],
       "properties": {
         "tipo": {
