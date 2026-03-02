@@ -1,254 +1,276 @@
 # ⚖️ Scale Daemon
 
-**Scale Daemon** es un servicio de Windows de alto rendimiento diseñado para actuar como puente entre básculas industriales (RS232/Serial) y aplicaciones web modernas. A diferencia de soluciones simples, este daemon funciona como un middleware persistente que gestiona la reconexión automática, el filtrado de ruido y la distribución de datos mediante WebSockets de baja latencia.
+![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat)
+![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=flat&logo=windows&logoColor=white)
+![CI](https://img.shields.io/github/actions/workflow/status/adcondev/scale-daemon/ci.yml?label=CI&logo=github)
+![CodeQL](https://img.shields.io/github/actions/workflow/status/adcondev/scale-daemon/codeql.yml?label=CodeQL&logo=github)
 
-El servicio está optimizado para entornos de **retail y logística**, permitiendo que cualquier navegador en la red local obtenga lecturas de peso en tiempo real sin necesidad de drivers adicionales en el cliente.
+<!-- ![Logo](URL) -->
+
+**Scale Daemon** is a high-performance Windows Service designed to bridge industrial weighing scales (RS232/Serial) with
+modern web applications. Unlike simple serial readers, this daemon acts as persistent middleware that handles automatic
+reconnection, noise filtering, and data distribution via low-latency WebSockets.
+
+Optimized for **retail and logistics** environments, it allows any browser on the local network to receive real-time
+weight readings without installing additional drivers on the client.
 
 ---
 
-## 🏗️ Arquitectura del Sistema
+## 🏗️ System Architecture
 
-El daemon utiliza un modelo de **Broadcaster asíncrono**. Un lector serial dedicado (Producer) alimenta un canal central, el cual distribuye los datos a todos los clientes WebSocket conectados (Consumers) de forma concurrente.
+The daemon uses an **asynchronous Broadcaster** model. A dedicated serial reader (Producer) feeds a central channel,
+which distributes data concurrently to all connected WebSocket clients (Consumers).
 
-### Estructura de Componentes
+### Component Overview
 
 ```mermaid
 graph TD
-    classDef go fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#000;
-    classDef data fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000;
-    classDef hw fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000;
+    classDef go fill: #e1f5fe, stroke: #01579b, stroke-width: 2px, color: #000
+    classDef data fill: #fff3e0, stroke: #e65100, stroke-width: 2px, color: #000
+    classDef hw fill: #f3e5f5, stroke: #4a148c, stroke-width: 2px, color: #000
+    classDef sec fill: #e8f5e9, stroke: #1b5e20, stroke-width: 2px, color: #000
 
     subgraph Host["Windows Service Host"]
         direction TB
-        Service[Wrapper svc.Service]:::go -->|Init/Start| HTTP[Servidor HTTP/WS]:::go
-        Service -->|Start| Reader[Serial Reader Loop]:::go
-        Reader -->|Canal| Broadcast[Broadcaster Engine]:::go
+        Service["svc.Service Wrapper"]:::go -->|Init/Start| Auth["Auth Manager"]:::sec
+        Service -->|Start| HTTP["HTTP/WS Server"]:::go
+        Service -->|Start| Reader["Serial Reader Loop"]:::go
+        Reader -->|Channel| Broadcast["Broadcaster Engine"]:::go
+        Auth -.->|Validate| HTTP
     end
 
-    subgraph Hardware["Capa Física"]
-        Scale[Báscula Industrial]:::hw -->|RS232/Serial| Reader
+    subgraph Hardware["Physical Layer"]
+        Scale["Industrial Scale"]:::hw -->|RS232/9600 baud| Reader
     end
 
-    subgraph Network["Distribución"]
-        Broadcast -->|Fan-Out| Client1[Web POS 1]:::data
-        Broadcast -->|Fan-Out| Client2[Web POS 2]:::data
-        Broadcast -->|Fan-Out| ClientN[Dashboard/Apps]:::data
+    subgraph Network["Distribution"]
+        Broadcast -->|Fan - Out| Client1["Web POS 1"]:::data
+        Broadcast -->|Fan - Out| Client2["Web POS 2"]:::data
+        Broadcast -->|Fan - Out| ClientN["Dashboard / Apps"]:::data
     end
 
+    HTTP -->|Serve| Dashboard["Embedded Dashboard"]:::data
 ```
 
-### Modelo de Concurrencia y Hot-Reload
+### Concurrency & Hot-Reload Model
 
-El servicio implementa un sistema de **configuración en caliente**. Al recibir un mensaje de configuración vía WebSocket, el daemon detiene de forma segura la goroutine de lectura actual, cierra el puerto serial y reinicia el bucle con los nuevos parámetros (Puerto, Marca o Modo Prueba) sin interrumpir las conexiones de otros clientes.
+The service implements a **hot-swap configuration** system. When a config message is received via WebSocket, the daemon
+safely stops the current read goroutine, closes the serial port, and restarts the loop with new parameters (Port, Brand,
+or Test Mode) — without disconnecting other clients.
 
 ```mermaid
 sequenceDiagram
-    participant C as Cliente Web
+    participant C as Web Client
     participant S as WebSocket Server
     participant R as Serial Reader
     participant H as Hardware (COM)
-
-    Note over R, H: Bucle de lectura activo
-    C ->> S: JSON {"tipo":"config", "puerto":"COM4"}
-    S ->> R: Señal de Reinicio (Mutex Lock)
+    Note over R, H: Active read loop
+    C ->> S: {"tipo":"config", "puerto":"COM4", "auth_token":"..."}
+    S ->> S: Validate token + rate limit
+    S ->> R: Config change signal
     R ->> H: Close Port
-    Note over R: Actualizando Configuración
+    Note over R: Updating configuration
     R ->> H: Open Port (COM4)
-    R -->> S: OK / Reanudado
-    S -->> C: Update Success
-
+    R -->> S: OK / Resumed
+    S -->> C: Streaming resumes
 ```
 
 ---
 
-## 🚀 Características Principales
+## 🚀 Features
 
-* 🔌 **Abstracción de Hardware**: Soporte para múltiples protocolos de básculas (Rhino, etc.) mediante comandos de solicitud de peso (`P`).
-* 🔄 **Resiliencia Automática**: Estrategia de reintento con backoff ante desconexiones físicas del cable serial.
-* 🧪 **Modo Simulación Integrado**: Generación de pesos aleatorios con fluctuación realista para desarrollo sin hardware físico.
-* 🛠️ **Instalador Profesional**: TUI (Text User Interface) para gestionar el ciclo de vida del servicio (Instalar, Iniciar, Detener).
-* 📊 **Dashboard de Diagnóstico**: Interfaz web embebida para monitorear el peso y probar la configuración visualmente.
-* 🚨 **Diagnóstico en Tiempo Real**: Notificación inmediata de errores de conexión (puerto no encontrado, desconexión
-  física) directamente en el Dashboard, eliminando la necesidad de revisar logs del servidor.
+- 🔌 **Hardware Abstraction** — Multi-brand scale support via configurable serial commands (Rhino, etc.)
+- 🔄 **Automatic Resilience** — Retry strategy with backoff for physical cable disconnections
+- 🧪 **Built-in Simulation Mode** — Realistic fluctuating weight generation for development without physical hardware
+- 📊 **Embedded Diagnostic Dashboard** — Web interface served via `go:embed` for real-time weight monitoring and
+  configuration
+- 🔐 **Layered Security** — bcrypt login, session cookies (HttpOnly/SameSite), brute-force lockout, per-client rate
+  limiting, and config token authorization
+- 🚨 **Real-Time Error Broadcasting** — Connection failures (port not found, cable disconnected) are pushed to clients
+  via WebSocket, not just logged server-side
+- ♻️ **Hot Configuration Reload** — Change serial port, scale brand, or test mode via WebSocket without restarting the
+  service
+- 📝 **Auto-Rotating Logs** — 5 MB threshold with last-1000-line preservation and verbose/quiet filtering
+- 🏥 **Health Endpoint** — JSON health check with scale connection status, uptime, and build info
 
 ---
 
-## 📡 Protocolo WebSocket
+## 📡 WebSocket Protocol
 
-### Endpoints
+The API uses a **hybrid protocol**: JSON objects for control/metadata, raw JSON strings for weight data streaming (
+minimizing overhead).
 
-* **WebSocket**: `ws://[IP]:8765/ws` (Conexión para recibir datos de peso)
-* **Dashboard**: `http://[IP]:8765/` (Interfaz visual embebida)
+| Endpoint                      | Description                           |
+|-------------------------------|---------------------------------------|
+| `ws://{host}:{port}/ws`       | Real-time weight data + configuration |
+| `http://{host}:{port}/`       | Embedded diagnostic dashboard         |
+| `http://{host}:{port}/health` | Service health check (JSON)           |
+| `http://{host}:{port}/ping`   | Latency check → `pong`                |
 
-### Intercambio de Datos
-
-**1. Mensaje de Ambiente (Servidor -> Cliente):**
-Al conectar, el servidor envía información del entorno inyectada durante la compilación.
-
-```json
-{
-  "tipo": "ambiente",
-  "ambiente": "REMOTE",
-  "version": "2026-01-29 14:08:03",
-  "config": {
-    "puerto": "COM3",
-    "marca": "Rhino BAR 8RS",
-    "modoPrueba": false
-  }
-}
-
-```
-
-**2. Lectura de Peso (Broadcasting):**
-El peso se envía como un string simple o JSON dependiendo de la estabilidad de la trama.
+### Weight Streaming
 
 ```json
 "15.42"
-
 ```
 
----
+### Error Codes (Broadcast)
 
-### Códigos de Error
+| Code             | Description                   |
+|------------------|-------------------------------|
+| `ERR_SCALE_CONN` | Cannot open serial port       |
+| `ERR_EOF`        | Cable physically disconnected |
+| `ERR_TIMEOUT`    | Scale not responding (5s)     |
+| `ERR_READ`       | Read error (noise/driver)     |
 
-Además del peso, el servidor puede enviar códigos de error críticos para que el cliente notifique al usuario
-visualmente.
-
-| Código         | Descripción       | Causa Común                                                               |
-|----------------|-------------------|---------------------------------------------------------------------------|
-| ERR_SCALE_CONN | Error de Conexión | El puerto COM no existe o está ocupado por otro proceso.                  |
-| ERR_EOF        | Desconexión (EOF) | El cable de la báscula fue desconectado físicamente durante la operación. |
-| ERR_TIMEOUT    | Tiempo de Espera  | La báscula está conectada pero no responde a los comandos (5s).           |
-| ERR_READ       | Error de Lectura  | Ruido en la línea o fallo del driver serial.                              |
-
-## ⚙️ Configuración y Build
-
-El proyecto utiliza un `Taskfile` para gestionar compilaciones inyectando variables en tiempo de enlace (`ldflags`).
-
-| Tarea                | Descripción                                             |
-|----------------------|---------------------------------------------------------|
-| `task build:local`   | Compila instalador para entorno de pruebas (localhost). |
-| `task build:remote`  | Compila instalador para producción (0.0.0.0).           |
-| `task build:console` | Genera ejecutables de consola para debugging rápido.    |
-| `task clean`         | Limpia binarios y archivos temporales.                  |
-
-### Inyección de Metadatos
-
-El proceso de build inyecta automáticamente:
-
-* `BuildEnvironment`: Define el alcance de la red.
-* `ServiceName`: Nombre del servicio en el SCM de Windows.
-* `BuildDate/Time`: Estampa de tiempo de la versión.
+> 📄 Full API documentation: [`api/v1/SCALE_WEBSOCKET_V1.md`](api/v1/SCALE_WEBSOCKET_V1.md) | JSON Schema: [
+`api/v1/scale_websocket.schema.json`](api/v1/scale_websocket.schema.json)
 
 ---
 
-## 📂 Estructura del Proyecto
+## 🔐 Security
 
-```text
-scale-daemon/
-├── cmd/
-│   ├── BasculaServicio/    # Código principal del Daemon
-│   └── BasculaInstalador/  # TUI para instalación del servicio
-├── internal/
-│   └── assets/             # Recursos web (HTML/JS) embebidos
-├── tmp/                    # Binarios temporales para el empaquetado
-├── bin/                    # Artefactos finales (Instaladores)
-├── embedded.go             # Implementación de go:embed
-└── Taskfile.yml            # Automatización de tareas
+| Layer               | Protects                 | Mechanism                                  |
+|---------------------|--------------------------|--------------------------------------------|
+| **Dashboard Login** | Panel access (`/`)       | bcrypt password + HttpOnly session cookie  |
+| **Config Token**    | WebSocket config changes | Auth token validated per message           |
+| **Rate Limiter**    | Config abuse             | Max 15 changes/min per client              |
+| **Brute Force**     | Login attacks            | IP lockout after 5 failed attempts (5 min) |
+
+### Access Model
 
 ```
+PUBLIC (no auth required)
+├── GET  /login          Login page
+├── POST /auth/login     Process login
+├── GET  /ping           Latency check
+├── GET  /health         Service diagnostics
+├── WS   /ws             Weight streaming + config (token protected)
+├── GET  /css/*          Static assets
+└── GET  /js/*           Static assets
 
----
-
-## 📝 Logs y Mantenimiento
-
-Los logs se almacenan en `%PROGRAMDATA%` con un sistema de **autorrotación** para prevenir el llenado del disco:
-
-* **Ruta**: `C:\ProgramData\R2k_Bascula_Remote\R2k_Bascula_Remote.log`
-* **Límite**: 5 MB (al excederse, se conservan las últimas 1000 líneas para trazabilidad).
-
----
-
-## 🔐 Seguridad
-
-Scale Daemon implementa un modelo de seguridad por capas, diseñado para entornos de retail donde se necesita
-proteger la configuración del servicio sin impactar la lectura de peso en tiempo real.
-
-### Capas de Protección
-
-| Capa                | Protege                                | Mecanismo                                      |
-|---------------------|----------------------------------------|------------------------------------------------|
-| **Dashboard Login** | Acceso al panel de control (`/`)       | Contraseña + sesión con cookie HttpOnly        |
-| **Config Token**    | Cambios de configuración vía WebSocket | Token de autorización en cada mensaje `config` |
-| **Rate Limiter**    | Abuso de configuración                 | Máximo 3 cambios por minuto por conexión       |
-| **Brute Force**     | Ataques de fuerza bruta al login       | Bloqueo de IP tras 5 intentos fallidos (5 min) |
-
-### Modelo de Acceso por Endpoint
-
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│  PÚBLICO (sin autenticación)                                    │
-│  ├── GET  /login          Página de login                       │
-│  ├── POST /auth/login     Procesar login                        │
-│  ├── GET  /ping           Verificación de latencia              │
-│  ├── GET  /health         Diagnóstico del servicio              │
-│  ├── WS   /ws             Streaming de peso + config (token)    │
-│  ├── GET  /css/*          Archivos estáticos                    │
-│  └── GET  /js/*           Archivos estáticos                    │
-│                                                                 │
-│  PROTEGIDO (sesión requerida)                                   │
-│  └── GET  /               Dashboard (inyecta config token)      │
-└─────────────────────────────────────────────────────────────────┘
+PROTECTED (session required)
+└── GET  /               Dashboard (injects config token)
 ```
 
-> **Nota:** El endpoint `/ws` es público para permitir que aplicaciones POS reciban peso sin necesidad de
-> autenticarse en el dashboard. Los cambios de configuración dentro del WebSocket están protegidos por el
-> `authToken`, que sólo está disponible para sesiones autenticadas a través del dashboard.
+> **Note:** `/ws` is public so POS applications can receive weight data without dashboard authentication. Config changes
+> within WebSocket are protected by the `auth_token`, only available to authenticated dashboard sessions.
 
-### Configuración
+---
 
-Los secretos se definen en un archivo `.env` en el directorio del build system (`poster-tuis/`):
+## ⚙️ Getting Started
+
+### Prerequisites
+
+- **Go** 1.24+ ([download](https://go.dev/dl/))
+- **Task** (Taskfile runner) — `go install github.com/go-task/task/v3/cmd/task@latest`
+- **Windows** (the service uses Windows SCM APIs)
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/adcondev/scale-daemon.git
+cd scale-daemon
+
+# Install Go dependencies
+go mod download
+```
+
+### Configuration
+
+Create a `.env` file in the project root:
 
 ```env
-# ⚠️ NO commitear a control de versiones
-DASHBOARD_PASSWORD=MiContraseña2026
-CONFIG_AUTH_TOKEN=mi-token-secreto
+# ⚠️ Do NOT commit to version control
+SCALE_DASHBOARD_HASH=<base64-encoded-bcrypt-hash>
+SCALE_AUTH_TOKEN=<your-secret-token>
+BUILD_ENV=local
 ```
 
-| Variable             | Vacío =                                          | Descripción                                        |
-|----------------------|--------------------------------------------------|----------------------------------------------------|
-| `DASHBOARD_PASSWORD` | Auth deshabilitado (acceso directo al dashboard) | Contraseña para el login del dashboard             |
-| `CONFIG_AUTH_TOKEN`  | Config sin validación de token                   | Token requerido en mensajes `config` vía WebSocket |
+| Variable               | If Empty                                | Description                                   |
+|------------------------|-----------------------------------------|-----------------------------------------------|
+| `SCALE_DASHBOARD_HASH` | Auth disabled (direct dashboard access) | bcrypt hash (base64) for dashboard login      |
+| `SCALE_AUTH_TOKEN`     | Config changes accepted without token   | Token required in WebSocket `config` messages |
 
-### Pipeline de Inyección
+### Build & Run
 
-```text
-.env (plaintext) 
-  → hashpw (bcrypt + base64) 
-    → ldflags -X PasswordHashB64=... 
-      → binario compilado (sin plaintext)
+```bash
+# Build the service binary (console mode)
+task build
+
+# Build and run immediately
+task run
+
+# Clean build artifacts
+task clean
 ```
 
-La contraseña **nunca** se almacena en texto plano en el binario. Se inyecta como un hash bcrypt codificado
-en base64 mediante `ldflags` durante la compilación. El token de configuración se inyecta directamente
-(no es un secreto criptográfico, es un valor de autorización).
+### Running Tests
 
-### Sesiones
+```bash
+# Run all tests with race detection
+go test -v -race ./...
 
-- Duración: **15 minutos** (configurable en `auth.go`)
-- Cookie: `sd_session`, `HttpOnly`, `SameSite=Strict`
-- Almacenamiento: en memoria del proceso (se pierden al reiniciar el servicio)
-- Limpieza automática: goroutine periódica cada 5 minutos
+# Run benchmarks
+go test -bench=. -benchmem ./...
 
-### Auditoría
+# Run linter
+golangci-lint run --config=.golangci.yml
+```
 
-Todos los eventos de seguridad se registran con el prefijo `[AUDIT]`:
+---
+
+## 📂 Project Structure
 
 ```
-[AUDIT] LOGIN_SUCCESS | IP=192.168.1.100:54321
-[AUDIT] LOGIN_FAILED | IP=192.168.1.100:54322
-[AUDIT] LOGIN_BLOCKED | IP=192.168.1.100:54323 | reason=lockout
-[AUDIT] CONFIG_ACCEPTED | puerto=COM4 marca=Rhino modoPrueba=false
-[AUDIT] CONFIG_REJECTED | reason=invalid_token | puerto=COM4 marca=Rhino
-[AUDIT] CONFIG_RATE_LIMITED | client=0xc0001a2000
+scale-daemon/
+├── api/v1/                  # API documentation & JSON Schema
+├── cmd/BasculaServicio/     # Service entry point (main.go)
+├── internal/
+│   ├── assets/web/          # Embedded web dashboard (HTML/CSS/JS)
+│   ├── auth/                # Authentication, sessions, brute-force protection
+│   ├── config/              # Runtime configuration with hot-swap
+│   ├── daemon/              # Service lifecycle (Init/Start/Stop)
+│   ├── logging/             # Log rotation, filtering, secure file access
+│   ├── scale/               # Serial port reader, brand commands, simulation
+│   └── server/              # HTTP/WS server, broadcaster, rate limiting, models
+├── .github/
+│   ├── workflows/           # CI, CodeQL, PR automation, PR status dashboard
+│   └── codeql-config.yml    # CodeQL security analysis config
+├── embed.go                 # go:embed directive for web assets
+├── Taskfile.yml             # Build automation with ldflags injection
+├── .golangci.yml            # Linter configuration (15+ linters)
+└── go.mod                   # Go module definition
 ```
+
+---
+
+## 📝 Logs
+
+Logs are stored in `%PROGRAMDATA%` with an **auto-rotation** system:
+
+- **Path:** `C:\ProgramData\{ServiceName}\{ServiceName}.log`
+- **Limit:** 5 MB (when exceeded, last 1000 lines are preserved)
+- **Filtering:** Non-critical messages (weight readings, client connect/disconnect) are suppressed when verbose mode is
+  off
+- **Fallback:** If the log directory is not writable (console mode), logs go to stdout
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please ensure:
+
+1. PR titles follow [Conventional Commits](https://www.conventionalcommits.org/) (enforced by CI)
+2. All tests pass with race detection (`go test -race ./...`)
+3. Code passes `golangci-lint` with the project config
+4. Use the [PR template](.github/pull_request_template.md) provided
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
+
+Copyright (c) 2025 Red 2000
