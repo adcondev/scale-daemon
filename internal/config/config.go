@@ -35,23 +35,30 @@ type Environment struct {
 	DefaultPort string
 	DefaultMode bool // true = test mode (simulated weights), false = real weights
 }
+// Common configuration constants
+const (
+	EnvRemoteName = "REMOTO"
+	EnvLocalName  = "LOCAL"
+	DefaultComPort = "COM3"
+)
+
 
 // TODO: Make Port inyectable via ldflags. Same port and addres could cause conflicts
 
 // Environments defines available deployment configurations
 var Environments = map[string]Environment{
 	"remote": {
-		Name:        "REMOTO",
+		Name:        EnvRemoteName,
 		ServiceName: ServiceName,
 		ListenAddr:  "0.0.0.0:" + ServerPort,
-		DefaultPort: "COM3",
+		DefaultPort: DefaultComPort,
 		DefaultMode: false,
 	},
 	"local": {
-		Name:        "LOCAL",
+		Name:        EnvLocalName,
 		ServiceName: ServiceName,
 		ListenAddr:  "localhost:" + ServerPort,
-		DefaultPort: "COM3",
+		DefaultPort: DefaultComPort,
 		DefaultMode: false,
 	},
 }

@@ -17,25 +17,25 @@ func TestGetEnvironment(t *testing.T) {
 		{
 			name:     "Valid remote environment",
 			env:      "remote",
-			wantName: "REMOTO",
+			wantName: EnvRemoteName,
 			wantLog:  false,
 		},
 		{
 			name:     "Valid local environment",
 			env:      "local",
-			wantName: "LOCAL",
+			wantName: EnvLocalName,
 			wantLog:  false,
 		},
 		{
 			name:     "Unknown environment falls back to local",
 			env:      "unknown",
-			wantName: "LOCAL",
+			wantName: EnvLocalName,
 			wantLog:  true,
 		},
 		{
 			name:     "Empty environment falls back to local",
 			env:      "",
-			wantName: "LOCAL",
+			wantName: EnvLocalName,
 			wantLog:  true,
 		},
 	}
@@ -77,24 +77,24 @@ func TestEnvironmentsConsistency(t *testing.T) {
 
 	// We test what is currently set in the global state
 	remoteEnv := Environments["remote"]
-	if remoteEnv.Name != "REMOTO" {
+	if remoteEnv.Name != EnvRemoteName {
 		t.Errorf("Expected 'remote' environment Name to be 'REMOTO', got %s", remoteEnv.Name)
 	}
 	if !strings.HasSuffix(remoteEnv.ListenAddr, expectedListenSuffix) {
 		t.Errorf("Expected 'remote' ListenAddr to end with %q, got %s", expectedListenSuffix, remoteEnv.ListenAddr)
 	}
-	if remoteEnv.DefaultPort != "COM3" {
+	if remoteEnv.DefaultPort != DefaultComPort {
 		t.Errorf("Expected 'remote' DefaultPort to be 'COM3', got %s", remoteEnv.DefaultPort)
 	}
 
 	localEnv := Environments["local"]
-	if localEnv.Name != "LOCAL" {
+	if localEnv.Name != EnvLocalName {
 		t.Errorf("Expected 'local' environment Name to be 'LOCAL', got %s", localEnv.Name)
 	}
 	if !strings.HasSuffix(localEnv.ListenAddr, expectedListenSuffix) {
 		t.Errorf("Expected 'local' ListenAddr to end with %q, got %s", expectedListenSuffix, localEnv.ListenAddr)
 	}
-	if localEnv.DefaultPort != "COM3" {
+	if localEnv.DefaultPort != DefaultComPort {
 		t.Errorf("Expected 'local' DefaultPort to be 'COM3', got %s", localEnv.DefaultPort)
 	}
 }
