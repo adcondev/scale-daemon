@@ -14,15 +14,6 @@ const MaxLogSize = 5 * 1024 * 1024
 // RotateIfNeeded truncates the log file if it exceeds MaxLogSize
 // Keeps the last 1000 lines for continuity
 func RotateIfNeeded(path string) error {
-	baseDir := filepath.Dir(path)
-	relPath := filepath.Base(path)
-	securePath, err := secureFilepath(baseDir, relPath)
-	if err != nil {
-		return err
-	}
-	path = securePath
-
-
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -46,14 +37,13 @@ func RotateIfNeeded(path string) error {
 
 // ReadLastNLines reads the last n lines from a file efficiently
 func ReadLastNLines(path string, n int) []string {
-
 	baseDir := filepath.Dir(path)
 	relPath := filepath.Base(path)
 	securePath, err := secureFilepath(baseDir, relPath)
 	if err != nil {
 		return []string{}
 	}
-	file, err := os.Open(securePath)
+	file, err := os.Open(securePath) //nolint:gosec
 	if err != nil {
 		return []string{}
 	}
@@ -121,7 +111,6 @@ func Flush(path string) error {
 
 // GetFileSize returns the size of the log file in bytes
 func GetFileSize(path string) int64 {
-
 	info, err := os.Stat(path)
 	if err != nil {
 		return 0

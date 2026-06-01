@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 )
-
 const testClientAddr = "192.168.1.100"
+
 
 func TestNewConfigRateLimiter(t *testing.T) {
 	rl := NewConfigRateLimiter(5)
