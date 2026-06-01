@@ -13,7 +13,7 @@ func TestSecureFilepath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(baseDir)
+	defer func() { _ = os.RemoveAll(baseDir) }()
 
 	// Resolve symlinks on the base directory (useful for macOS /tmp)
 	if eval, err := filepath.EvalSymlinks(baseDir); err == nil {
@@ -90,7 +90,7 @@ func TestSecureFilepath_Symlinks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(baseDir)
+	defer func() { _ = os.RemoveAll(baseDir) }()
 
 	if eval, err := filepath.EvalSymlinks(baseDir); err == nil {
 		baseDir = eval
@@ -101,7 +101,7 @@ func TestSecureFilepath_Symlinks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create outside dir: %v", err)
 	}
-	defer os.RemoveAll(outsideDir)
+	defer func() { _ = os.RemoveAll(outsideDir) }()
 
 	if eval, err := filepath.EvalSymlinks(outsideDir); err == nil {
 		outsideDir = eval
@@ -109,7 +109,7 @@ func TestSecureFilepath_Symlinks(t *testing.T) {
 
 	// Create a file in outside dir
 	outsideFile := filepath.Join(outsideDir, "secret.txt")
-	err = os.WriteFile(outsideFile, []byte("secret"), 0644)
+	err = os.WriteFile(outsideFile, []byte("secret"), 0600)
 	if err != nil {
 		t.Fatalf("Failed to create outside file: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestSecureFilepath_Symlinks(t *testing.T) {
 
 	// Create a symlink in base dir pointing to inside file
 	insideFile := filepath.Join(baseDir, "inside.txt")
-	err = os.WriteFile(insideFile, []byte("safe"), 0644)
+	err = os.WriteFile(insideFile, []byte("safe"), 0600)
 	if err != nil {
 		t.Fatalf("Failed to create inside file: %v", err)
 	}
