@@ -25,16 +25,16 @@ var NonCriticalPrefixes = []string{
 
 // FilteredLogger wraps a file writer with verbose filtering
 type FilteredLogger struct {
-	file    *os.File
+	writer  io.Writer
 	mu      sync.Mutex
 	verbose *bool
 	vMu     *sync.RWMutex
 }
 
 // NewFilteredLogger creates a logger that can filter non-critical messages
-func NewFilteredLogger(file *os.File, verbose *bool, vMu *sync.RWMutex) *FilteredLogger {
+func NewFilteredLogger(writer io.Writer, verbose *bool, vMu *sync.RWMutex) *FilteredLogger {
 	return &FilteredLogger{
-		file:    file,
+		writer: writer,
 		verbose: verbose,
 		vMu:     vMu,
 	}
@@ -56,7 +56,7 @@ func (l *FilteredLogger) Write(p []byte) (n int, err error) {
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.file.Write(p)
+	return l.writer.Write(p)
 }
 
 // Manager handles log file lifecycle and configuration
