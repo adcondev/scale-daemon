@@ -77,12 +77,10 @@ func Setup(serviceName string, defaultVerbose bool) (*Manager, error) {
 	mgr.FilePath = filepath.Join(logDir, serviceName+".log")
 
 	// Try to create log directory
-	//nolint:gosec
 	if err := os.MkdirAll(logDir, 0750); err != nil {
 		// Permission denied - fallback to stdout (console mode)
 		log.SetOutput(os.Stdout)
 		mgr.FilePath = ""
-		//nolint:gosec
 		log.Printf("[i] Logging to stdout (no write access to %q)", logDir)
 		return mgr, nil
 	}
@@ -93,17 +91,29 @@ func Setup(serviceName string, defaultVerbose bool) (*Manager, error) {
 	}
 
 	// Open log file
-	f, err := os.OpenFile(mgr.FilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+	mgr.FilePath = filepath.Clean(mgr.FilePath)
+
+	securePath, err := secureFilepath(filepath.Dir(mgr.FilePath), filepath.Base(mgr.FilePath))
+	if err != nil {
+		log.SetOutput(os.Stdout)
+		log.Printf("[i] Logging to stdout (cannot secure file path)")
+		return mgr, nil
+	}
+	f, err := os.OpenFile(securePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 	if err != nil {
 		// Fallback to stdout
 		log.SetOutput(os.Stdout)
-		log.Printf("[i] Logging to stdout (cannot open %s: %v)", mgr.FilePath, err)
+		safePath := strings.ReplaceAll(mgr.FilePath, "\n", "")
+		safePath = strings.ReplaceAll(safePath, "\r", "")
+		log.Printf("[i] Logging to stdout (cannot open %s: %v)", safePath, err)
 		return mgr, nil
 	}
 
 	mgr.file = f
 	log.SetOutput(NewFilteredLogger(f, &mgr.Verbose, &mgr.mu))
-	log.Printf("[i] Logging to: %s", mgr.FilePath)
+	safePath2 := strings.ReplaceAll(mgr.FilePath, "\n", "")
+	safePath2 = strings.ReplaceAll(safePath2, "\r", "")
+	log.Printf("[i] Logging to: %s", safePath2)
 
 	return mgr, nil
 }

@@ -170,7 +170,6 @@ func (s *Server) serveDashboard(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	data := struct {
-		//nolint:gosec
 		AuthToken string
 	}{
 		AuthToken: config.AuthToken,
@@ -192,7 +191,6 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	// Check lockout FIRST
 	if s.auth.IsLockedOut(ip) {
-		//nolint:gosec
 		log.Printf("[AUDIT] LOGIN_BLOCKED | IP=%q | reason=lockout", ip)
 		http.Redirect(w, r, "/login?locked=1", http.StatusSeeOther)
 		return
@@ -201,7 +199,6 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 	if !s.auth.ValidatePassword(password) {
 		s.auth.RecordFailedLogin(ip)
-		//nolint:gosec
 		log.Printf("[AUDIT] LOGIN_FAILED | IP=%q", ip)
 		http.Redirect(w, r, "/login?error=1", http.StatusSeeOther)
 		return
@@ -210,7 +207,6 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Success
 	s.auth.ClearFailedLogins(ip)
 	s.auth.SetSessionCookie(w)
-	//nolint:gosec
 	log.Printf("[AUDIT] LOGIN_SUCCESS | IP=%q", ip)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
