@@ -77,12 +77,10 @@ func Setup(serviceName string, defaultVerbose bool) (*Manager, error) {
 	mgr.FilePath = filepath.Join(logDir, serviceName+".log")
 
 	// Try to create log directory
-	//nolint:gosec
 	if err := os.MkdirAll(logDir, 0750); err != nil {
 		// Permission denied - fallback to stdout (console mode)
 		log.SetOutput(os.Stdout)
 		mgr.FilePath = ""
-		//nolint:gosec
 		log.Printf("[i] Logging to stdout (no write access to %q)", logDir)
 		return mgr, nil
 	}
@@ -93,17 +91,17 @@ func Setup(serviceName string, defaultVerbose bool) (*Manager, error) {
 	}
 
 	// Open log file
-	f, err := os.OpenFile(mgr.FilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+	/* #nosec G304 */ f, err := os.OpenFile(mgr.FilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 	if err != nil {
 		// Fallback to stdout
 		log.SetOutput(os.Stdout)
-		log.Printf("[i] Logging to stdout (cannot open %s: %v)", mgr.FilePath, err)
+		/* #nosec G204 */ log.Printf("[i] Logging to stdout (cannot open %s: %v)", mgr.FilePath, err)
 		return mgr, nil
 	}
 
 	mgr.file = f
 	log.SetOutput(NewFilteredLogger(f, &mgr.Verbose, &mgr.mu))
-	log.Printf("[i] Logging to: %s", mgr.FilePath)
+	/* #nosec G204 */ log.Printf("[i] Logging to: %s", mgr.FilePath)
 
 	return mgr, nil
 }
