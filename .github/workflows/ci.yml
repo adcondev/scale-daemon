@@ -61,6 +61,7 @@ jobs:
             scale
             server
             general
+            logging
           requireScope: true
           subjectPattern: ^(?![A-Z]).+$
           subjectPatternError: |

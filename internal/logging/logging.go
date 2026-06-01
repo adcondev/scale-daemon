@@ -25,16 +25,16 @@ var NonCriticalPrefixes = []string{
 
 // FilteredLogger wraps a file writer with verbose filtering
 type FilteredLogger struct {
-	file    *os.File
+	writer  io.Writer
 	mu      sync.Mutex
 	verbose *bool
 	vMu     *sync.RWMutex
 }
 
 // NewFilteredLogger creates a logger that can filter non-critical messages
-func NewFilteredLogger(file *os.File, verbose *bool, vMu *sync.RWMutex) *FilteredLogger {
+func NewFilteredLogger(writer io.Writer, verbose *bool, vMu *sync.RWMutex) *FilteredLogger {
 	return &FilteredLogger{
-		file:    file,
+		writer: writer,
 		verbose: verbose,
 		vMu:     vMu,
 	}
@@ -56,7 +56,7 @@ func (l *FilteredLogger) Write(p []byte) (n int, err error) {
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.file.Write(p)
+	return l.writer.Write(p)
 }
 
 // Manager handles log file lifecycle and configuration
@@ -77,12 +77,10 @@ func Setup(serviceName string, defaultVerbose bool) (*Manager, error) {
 	mgr.FilePath = filepath.Join(logDir, serviceName+".log")
 
 	// Try to create log directory
-	//nolint:gosec
 	if err := os.MkdirAll(logDir, 0750); err != nil {
 		// Permission denied - fallback to stdout (console mode)
 		log.SetOutput(os.Stdout)
 		mgr.FilePath = ""
-		//nolint:gosec
 		log.Printf("[i] Logging to stdout (no write access to %q)", logDir)
 		return mgr, nil
 	}
@@ -93,17 +91,21 @@ func Setup(serviceName string, defaultVerbose bool) (*Manager, error) {
 	}
 
 	// Open log file
-	f, err := os.OpenFile(mgr.FilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+	securePath, err := secureFilepath(filepath.Dir(mgr.FilePath), mgr.FilePath)
+	if err != nil {
+		return mgr, err
+	}
+	f, err := os.OpenFile(securePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 	if err != nil {
 		// Fallback to stdout
 		log.SetOutput(os.Stdout)
-		log.Printf("[i] Logging to stdout (cannot open %s: %v)", mgr.FilePath, err)
+		log.Printf("[i] Logging to stdout (cannot open %s: %v)", filepath.Clean(mgr.FilePath), err)
 		return mgr, nil
 	}
 
 	mgr.file = f
 	log.SetOutput(NewFilteredLogger(f, &mgr.Verbose, &mgr.mu))
-	log.Printf("[i] Logging to: %s", mgr.FilePath)
+	log.Printf("[i] Logging to: %s", filepath.Clean(mgr.FilePath))
 
 	return mgr, nil
 }
@@ -151,10 +153,14 @@ func (m *Manager) Flush() error {
 	}
 
 	// Reopen file
-	f, err := os.OpenFile(m.FilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+	securePath, err := secureFilepath(filepath.Dir(m.FilePath), m.FilePath)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(securePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 	if err != nil {
 		log.SetOutput(os.Stdout)
-		log.Printf("[i] Logging to stdout (cannot open %s: %v)", m.FilePath, err)
+		log.Printf("[i] Logging to stdout (cannot open %s: %v)", filepath.Clean(m.FilePath), err)
 		return err
 	}
 

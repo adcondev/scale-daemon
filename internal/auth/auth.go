@@ -161,6 +161,7 @@ func (m *Manager) SetSessionCookie(w http.ResponseWriter) string {
 		Path:     "/",
 		MaxAge:   int(SessionDuration.Seconds()),
 		HttpOnly: true,
+		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
 	})
 	return token
@@ -174,6 +175,7 @@ func (m *Manager) ClearSessionCookie(w http.ResponseWriter) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
 	})
 }
