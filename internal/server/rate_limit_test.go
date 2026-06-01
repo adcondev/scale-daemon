@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+const testClientAddr = "192.168.1.100"
+
 func TestNewConfigRateLimiter(t *testing.T) {
 	rl := NewConfigRateLimiter(5)
 	if rl == nil {
@@ -21,7 +23,8 @@ func TestNewConfigRateLimiter(t *testing.T) {
 
 func TestConfigRateLimiter_Allow(t *testing.T) {
 	rl := NewConfigRateLimiter(3)
-	client := "192.168.1.100"
+
+	client := testClientAddr
 
 	// Should allow up to maxPerMin
 	for i := 0; i < 3; i++ {
@@ -38,7 +41,8 @@ func TestConfigRateLimiter_Allow(t *testing.T) {
 
 func TestConfigRateLimiter_IndependentClients(t *testing.T) {
 	rl := NewConfigRateLimiter(2)
-	clientA := "192.168.1.100"
+
+	clientA := testClientAddr
 	clientB := "192.168.1.101"
 
 	// Exhaust client A
@@ -56,7 +60,8 @@ func TestConfigRateLimiter_IndependentClients(t *testing.T) {
 
 func TestConfigRateLimiter_Pruning(t *testing.T) {
 	rl := NewConfigRateLimiter(2)
-	client := "192.168.1.100"
+
+	client := testClientAddr
 
 	// Inject old timestamps
 	rl.mu.Lock()
@@ -82,7 +87,8 @@ func TestConfigRateLimiter_Pruning(t *testing.T) {
 
 func TestConfigRateLimiter_Concurrency(t *testing.T) {
 	rl := NewConfigRateLimiter(100)
-	client := "192.168.1.100"
+
+	client := testClientAddr
 	var wg sync.WaitGroup
 
 	numGoroutines := 150
