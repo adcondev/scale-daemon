@@ -9,7 +9,7 @@ type ConfigMessage struct {
 	Marca      string `json:"marca"`
 	ModoPrueba bool   `json:"modoPrueba"`
 	Dir        string `json:"dir,omitempty"`
-	//nolint:gosec
+
 	AuthToken string `json:"auth_token"` // Required for config changes
 }
 
