@@ -34,7 +34,7 @@ type FilteredLogger struct {
 // NewFilteredLogger creates a logger that can filter non-critical messages
 func NewFilteredLogger(writer io.Writer, verbose *bool, vMu *sync.RWMutex) *FilteredLogger {
 	return &FilteredLogger{
-		writer:  writer,
+		writer: writer,
 		verbose: verbose,
 		vMu:     vMu,
 	}

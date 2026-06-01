@@ -1,0 +1,5 @@
+1. **Fix `gosec` lint issues**: Reapply fixes for path traversal vulnerabilities (G703) in the `logging` package by validating paths using `secureFilepath` in `RotateIfNeeded` and other file operations. Resolve log injection warnings (G706) by sanitizing inputs using `filepath.Clean` before printing in `log.Printf`. Fix G124 by adding missing Secure and SameSite attributes to HTTP cookies in the auth package. The earlier attempt introduced errors (like `path` instead of `securePath` and syntax errors in `SameSite`). This time I will be careful to get it right.
+2. **Review semantic PR title**: The PR title requires a correct release type. Ensure the commit uses the `fix` release type as there's a fix for gosec findings in the PR. E.g. `fix(security): resolve gosec findings in auth, logging, and server packages`.
+3. **Run tests & linter locally**: Verify the changes by running tests and linter locally.
+4. **Pre-commit**: Complete pre commit steps to make sure proper testing, verifications, reviews and reflections are done.
+5. **Submit**: Create PR documenting the testing improvement and security fixes.
